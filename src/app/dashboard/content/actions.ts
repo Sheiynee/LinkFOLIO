@@ -114,6 +114,24 @@ export async function updateBlock(input: UpdateInput) {
   return { ok: true };
 }
 
+export async function toggleBlockVisibility(id: string, visible: boolean) {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Not authenticated" };
+
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("blocks")
+    .update({ visible })
+    .eq("id", id)
+    .eq("user_id", session.user.id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/dashboard/content");
+  revalidatePath("/dashboard");
+  await revalidatePublicPage(session.user.id);
+  return { ok: true };
+}
+
 export async function deleteBlock(id: string) {
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated" };

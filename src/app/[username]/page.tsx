@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ProfileRender, type ProfileRenderData } from "@/components/profile-render";
 import { normalizeTheme } from "@/lib/themes";
@@ -6,6 +7,8 @@ import type { Block } from "@/lib/blocks";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
+
+const BOT_REGEX = /bot|crawler|spider|crawling|preview|facebookexternalhit|whatsapp|slackbot|discordbot|twitterbot/i;
 
 interface Props {
   params: { username: string };
@@ -23,11 +26,27 @@ async function getProfile(username: string) {
 
   const { data: blocks } = await supabase
     .from("blocks")
-    .select("id, type, title, url, content")
+    .select("id, type, title, url, content, visible")
     .eq("user_id", profile.id)
+    .eq("visible", true)
     .order("position", { ascending: true });
 
   return { ...profile, blocks: (blocks ?? []) as Block[] };
+}
+
+async function trackPageView(profileId: string) {
+  const headerList = headers();
+  const ua = headerList.get("user-agent") ?? "";
+  if (BOT_REGEX.test(ua)) return;
+
+  const supabase = createAdminClient();
+  void supabase
+    .from("page_views")
+    .insert({
+      profile_id: profileId,
+      referrer: headerList.get("referer"),
+    })
+    .then(() => {});
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -48,6 +67,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function PublicProfilePage({ params }: Props) {
   const profile = await getProfile(params.username);
   if (!profile) notFound();
+
+  await trackPageView(profile.id);
 
   const theme = normalizeTheme(profile.theme);
   const data: ProfileRenderData = {

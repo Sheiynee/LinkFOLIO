@@ -15,8 +15,10 @@ import {
   Type,
   Heading as HeadingIcon,
   Minus,
+  Eye,
+  EyeOff,
 } from "lucide-react";
-import { createBlock, updateBlock, deleteBlock, reorderBlocks } from "./actions";
+import { createBlock, updateBlock, deleteBlock, reorderBlocks, toggleBlockVisibility } from "./actions";
 import type { Block, BlockType } from "@/lib/blocks";
 import { BLOCK_LABELS } from "@/lib/blocks";
 import {
@@ -109,6 +111,19 @@ export function BlockList({ initial }: { initial: Block[] }) {
     });
   }
 
+  function handleToggleVisibility(id: string, currentVisible: boolean) {
+    const next = !currentVisible;
+    setBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, visible: next } : b)));
+    setError(null);
+    startTransition(async () => {
+      const result = await toggleBlockVisibility(id, next);
+      if (result.error) {
+        setError(result.error);
+        setBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, visible: currentVisible } : b)));
+      }
+    });
+  }
+
   function handleDelete(id: string) {
     if (!confirm("Delete this block?")) return;
     setError(null);
@@ -155,6 +170,7 @@ export function BlockList({ initial }: { initial: Block[] }) {
                 onCancelEdit={() => setEditingId(null)}
                 onSubmit={(fd) => handleUpdate(block, fd)}
                 onDelete={() => handleDelete(block.id)}
+                onToggleVisibility={() => handleToggleVisibility(block.id, block.visible !== false)}
                 pending={pending}
               />
             ))}
@@ -264,6 +280,7 @@ function SortableBlockItem({
   onCancelEdit,
   onSubmit,
   onDelete,
+  onToggleVisibility,
   pending,
 }: {
   block: Block;
@@ -272,6 +289,7 @@ function SortableBlockItem({
   onCancelEdit: () => void;
   onSubmit: (fd: FormData) => void;
   onDelete: () => void;
+  onToggleVisibility: () => void;
   pending: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -316,11 +334,13 @@ function SortableBlockItem({
     );
   }
 
+  const isHidden = block.visible === false;
+
   return (
     <li
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-2 rounded-lg border p-3 bg-background"
+      className={`flex items-center gap-2 rounded-lg border p-3 bg-background ${isHidden ? "opacity-50" : ""}`}
     >
       <button
         type="button"
@@ -349,6 +369,15 @@ function SortableBlockItem({
           <p className="text-sm text-muted-foreground italic">Divider</p>
         )}
       </div>
+      <Button
+        size="icon"
+        variant="ghost"
+        onClick={onToggleVisibility}
+        aria-label={isHidden ? "Show" : "Hide"}
+        title={isHidden ? "Hidden — click to show" : "Visible — click to hide"}
+      >
+        {isHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </Button>
       {block.type !== "divider" && (
         <Button size="icon" variant="ghost" onClick={onStartEdit} aria-label="Edit">
           <Pencil className="h-4 w-4" />

@@ -15,7 +15,7 @@ export default async function ContentPage() {
   const supabase = createAdminClient();
   const { data: blocks } = await supabase
     .from("blocks")
-    .select("id, type, title, url, content")
+    .select("id, type, title, url, content, visible")
     .eq("user_id", session.user.id)
     .order("position", { ascending: true });
 

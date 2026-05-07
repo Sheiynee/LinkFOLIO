@@ -6,6 +6,7 @@ export interface Block {
   title: string | null;
   url: string | null;
   content: string | null;
+  visible?: boolean;
 }
 
 export const BLOCK_LABELS: Record<BlockType, string> = {

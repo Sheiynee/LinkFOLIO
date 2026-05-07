@@ -246,7 +246,7 @@ export function ThemeEditor({ initialTheme, profile }: Props) {
             Preview · /{profile.username}
           </div>
           <div className="h-[640px] overflow-y-auto">
-            <ProfileRender profile={profile} theme={theme} />
+            <ProfileRender profile={profile} theme={theme} preview />
           </div>
         </Card>
       </div>

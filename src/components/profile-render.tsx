@@ -18,9 +18,11 @@ export interface ProfileRenderData {
 export function ProfileRender({
   profile,
   theme,
+  preview = false,
 }: {
   profile: ProfileRenderData;
   theme: Theme;
+  preview?: boolean;
 }) {
   const name = profile.display_name ?? profile.username;
   const fontVar = fontVarFor(theme.font);
@@ -90,9 +92,10 @@ export function ProfileRender({
                 return (
                   <a
                     key={block.id}
-                    href={block.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    href={preview ? "#" : `/r/${block.id}`}
+                    target={preview ? undefined : "_blank"}
+                    rel={preview ? undefined : "noopener noreferrer"}
+                    onClick={preview ? (e) => e.preventDefault() : undefined}
                     className={`flex items-center justify-between w-full border px-5 py-3 transition hover:opacity-90 ${radiusClass}`}
                     style={buttonStyle}
                   >

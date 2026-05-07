@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, Settings, Plus, Palette } from "lucide-react";
+import { ExternalLink, Settings, Plus, Palette, Eye, MousePointerClick } from "lucide-react";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { Block } from "@/lib/blocks";
 import { BLOCK_LABELS } from "@/lib/blocks";
+import { OnboardingChecklist } from "./onboarding-checklist";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -18,22 +19,41 @@ export default async function DashboardPage() {
   const supabase = createAdminClient();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("username, display_name, bio, avatar_url")
+    .select("id, username, display_name, bio, avatar_url, theme")
     .eq("id", session.user.id)
     .single();
 
   if (!profile) redirect("/auth/signin");
 
-  const { data: blocks } = await supabase
-    .from("blocks")
-    .select("id, type, title, url, content")
-    .eq("user_id", session.user.id)
-    .order("position", { ascending: true });
+  const [{ data: blocks }, viewsRes, clicksRes] = await Promise.all([
+    supabase
+      .from("blocks")
+      .select("id, type, title, url, content, visible")
+      .eq("user_id", session.user.id)
+      .order("position", { ascending: true }),
+    supabase
+      .from("page_views")
+      .select("id", { count: "exact", head: true })
+      .eq("profile_id", session.user.id),
+    supabase
+      .from("block_clicks")
+      .select("block_id, blocks!inner(user_id)", { count: "exact", head: true })
+      .eq("blocks.user_id", session.user.id),
+  ]);
 
   const blockList = (blocks ?? []) as Block[];
   const blockCount = blockList.length;
   const linkCount = blockList.filter((b) => b.type === "link").length;
+  const visibleCount = blockList.filter((b) => b.visible !== false).length;
+  const totalViews = viewsRes.count ?? 0;
+  const totalClicks = clicksRes.count ?? 0;
   const displayName = profile.display_name ?? session.user.name ?? profile.username;
+
+  const themeJson = profile.theme as Record<string, unknown> | null;
+  const hasCustomized = !!(
+    themeJson &&
+    (themeJson.preset !== "glass" || themeJson.bg_image_url)
+  );
 
   return (
     <main className="min-h-screen bg-background">
@@ -80,6 +100,34 @@ export default async function DashboardPage() {
           </p>
         </div>
 
+        <OnboardingChecklist
+          hasBlocks={blockCount > 0}
+          hasCustomized={hasCustomized}
+          hasView={totalViews > 0}
+          username={profile.username}
+        />
+
+        <div className="grid grid-cols-2 gap-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription className="flex items-center gap-1">
+                <Eye className="h-3.5 w-3.5" />
+                Page views
+              </CardDescription>
+              <CardTitle className="text-3xl">{totalViews.toLocaleString()}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription className="flex items-center gap-1">
+                <MousePointerClick className="h-3.5 w-3.5" />
+                Link clicks
+              </CardDescription>
+              <CardTitle className="text-3xl">{totalClicks.toLocaleString()}</CardTitle>
+            </CardHeader>
+          </Card>
+        </div>
+
         <Card>
           <CardHeader className="flex flex-row items-center gap-4">
             <Avatar className="h-16 w-16">
@@ -111,7 +159,7 @@ export default async function DashboardPage() {
               <CardDescription>
                 {blockCount === 0
                   ? "No blocks yet — add your first one!"
-                  : `${blockCount} block${blockCount === 1 ? "" : "s"} (${linkCount} link${linkCount === 1 ? "" : "s"})`}
+                  : `${visibleCount} of ${blockCount} blocks visible · ${linkCount} link${linkCount === 1 ? "" : "s"}`}
               </CardDescription>
             </div>
             <Button size="sm" render={<Link href="/dashboard/content" />}>

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { updateProfile, uploadAvatar } from "./actions";
+import { updateProfile, uploadAvatar, checkUsernameAvailable } from "./actions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Check, Loader2, X } from "lucide-react";
 
 interface Props {
   initial: {
@@ -22,6 +23,30 @@ export function ProfileForm({ initial }: Props) {
   const [uploadPending, startUpload] = useTransition();
   const [message, setMessage] = useState<{ ok?: boolean; text: string } | null>(null);
   const [avatar, setAvatar] = useState(initial.avatar_url);
+  const [username, setUsername] = useState(initial.username);
+  const [usernameStatus, setUsernameStatus] = useState<
+    | { state: "idle" }
+    | { state: "checking" }
+    | { state: "available" }
+    | { state: "unavailable"; reason: string }
+  >({ state: "idle" });
+
+  useEffect(() => {
+    if (username === initial.username) {
+      setUsernameStatus({ state: "idle" });
+      return;
+    }
+    setUsernameStatus({ state: "checking" });
+    const handle = setTimeout(async () => {
+      const result = await checkUsernameAvailable(username);
+      if (result.available) {
+        setUsernameStatus({ state: "available" });
+      } else {
+        setUsernameStatus({ state: "unavailable", reason: result.reason ?? "Unavailable" });
+      }
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [username, initial.username]);
 
   function handleSubmit(formData: FormData) {
     setMessage(null);
@@ -79,16 +104,36 @@ export function ProfileForm({ initial }: Props) {
         <Label htmlFor="username">Username (your page URL)</Label>
         <div className="flex items-center gap-2">
           <span className="text-muted-foreground text-sm">linkfolio.app/</span>
-          <Input
-            id="username"
-            name="username"
-            defaultValue={initial.username}
-            required
-            pattern="[a-z0-9_\-]{3,30}"
-            className="flex-1"
-          />
+          <div className="relative flex-1">
+            <Input
+              id="username"
+              name="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              pattern="[a-z0-9_\-]{3,30}"
+              className="pr-9"
+            />
+            <span className="absolute right-2 top-1/2 -translate-y-1/2">
+              {usernameStatus.state === "checking" && (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+              {usernameStatus.state === "available" && (
+                <Check className="h-4 w-4 text-green-600" />
+              )}
+              {usernameStatus.state === "unavailable" && (
+                <X className="h-4 w-4 text-destructive" />
+              )}
+            </span>
+          </div>
         </div>
-        <p className="text-xs text-muted-foreground">3-30 chars, lowercase letters, numbers, _ or -</p>
+        <p className="text-xs text-muted-foreground">
+          {usernameStatus.state === "unavailable"
+            ? <span className="text-destructive">{usernameStatus.reason}</span>
+            : usernameStatus.state === "available"
+            ? <span className="text-green-600">Available</span>
+            : "3-30 chars, lowercase letters, numbers, _ or -"}
+        </p>
       </div>
 
       <div className="space-y-2">
@@ -114,7 +159,7 @@ export function ProfileForm({ initial }: Props) {
       </div>
 
       <div className="flex items-center gap-3">
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending || usernameStatus.state === "unavailable" || usernameStatus.state === "checking"}>
           {pending ? "Saving..." : "Save changes"}
         </Button>
         {message && (

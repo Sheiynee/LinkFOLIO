@@ -4,6 +4,27 @@ import { auth } from "@/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 
+export async function checkUsernameAvailable(username: string) {
+  const session = await auth();
+  if (!session?.user?.id) return { available: false, reason: "Not authenticated" };
+
+  const normalized = username.trim().toLowerCase();
+  if (!/^[a-z0-9_-]{3,30}$/.test(normalized)) {
+    return { available: false, reason: "3-30 chars: a-z, 0-9, _ or -" };
+  }
+
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("username", normalized)
+    .neq("id", session.user.id)
+    .maybeSingle();
+
+  if (data) return { available: false, reason: "Already taken" };
+  return { available: true };
+}
+
 export async function updateProfile(formData: FormData) {
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated" };
