@@ -5,13 +5,14 @@ import {
   buttonRadiusClass,
   buttonExtraStyle,
 } from "@/lib/themes";
+import type { Block } from "@/lib/blocks";
 
 export interface ProfileRenderData {
   username: string;
   display_name: string | null;
   bio: string | null;
   avatar_url: string | null;
-  links: { id: string; title: string; url: string }[];
+  blocks: Block[];
 }
 
 export function ProfileRender({
@@ -66,44 +67,71 @@ export function ProfileRender({
       </div>
 
       <h1 className="text-2xl font-bold mb-1">{name}</h1>
-      <p
-        className="mb-4 text-sm font-mono"
-        style={{ color: theme.muted_color }}
-      >
+      <p className="mb-4 text-sm font-mono" style={{ color: theme.muted_color }}>
         @{profile.username}
       </p>
 
       {profile.bio && (
-        <p
-          className="text-center max-w-sm mb-8"
-          style={{ color: theme.muted_color }}
-        >
+        <p className="text-center max-w-sm mb-8" style={{ color: theme.muted_color }}>
           {profile.bio}
         </p>
       )}
 
       <div className="w-full max-w-sm space-y-3">
-        {profile.links.length === 0 ? (
-          <p
-            className="text-center text-sm"
-            style={{ color: theme.muted_color }}
-          >
-            No links added yet.
+        {profile.blocks.length === 0 ? (
+          <p className="text-center text-sm" style={{ color: theme.muted_color }}>
+            Nothing here yet.
           </p>
         ) : (
-          profile.links.map((link) => (
-            <a
-              key={link.id}
-              href={link.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`flex items-center justify-between w-full border px-5 py-3 transition hover:opacity-90 ${radiusClass}`}
-              style={buttonStyle}
-            >
-              <span className="font-medium">{link.title}</span>
-              <ExternalLink className="h-4 w-4 opacity-60" />
-            </a>
-          ))
+          profile.blocks.map((block) => {
+            switch (block.type) {
+              case "link":
+                if (!block.url || !block.title) return null;
+                return (
+                  <a
+                    key={block.id}
+                    href={block.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`flex items-center justify-between w-full border px-5 py-3 transition hover:opacity-90 ${radiusClass}`}
+                    style={buttonStyle}
+                  >
+                    <span className="font-medium">{block.title}</span>
+                    <ExternalLink className="h-4 w-4 opacity-60" />
+                  </a>
+                );
+              case "heading":
+                return (
+                  <h2
+                    key={block.id}
+                    className="text-xl font-bold pt-4 pb-1 text-center"
+                    style={{ color: theme.text_color }}
+                  >
+                    {block.content}
+                  </h2>
+                );
+              case "text":
+                return (
+                  <p
+                    key={block.id}
+                    className="whitespace-pre-wrap text-center text-sm leading-relaxed py-2"
+                    style={{ color: theme.muted_color }}
+                  >
+                    {block.content}
+                  </p>
+                );
+              case "divider":
+                return (
+                  <hr
+                    key={block.id}
+                    className="my-2 border-0 h-px w-full"
+                    style={{ backgroundColor: theme.muted_color, opacity: 0.3 }}
+                  />
+                );
+              default:
+                return null;
+            }
+          })
         )}
       </div>
 

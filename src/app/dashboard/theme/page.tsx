@@ -6,6 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeEditor } from "./theme-editor";
 import { normalizeTheme } from "@/lib/themes";
+import type { Block } from "@/lib/blocks";
 
 export default async function ThemePage() {
   const session = await auth();
@@ -19,9 +20,9 @@ export default async function ThemePage() {
     .single();
   if (!profile) redirect("/dashboard");
 
-  const { data: links } = await supabase
-    .from("links")
-    .select("id, title, url")
+  const { data: blocks } = await supabase
+    .from("blocks")
+    .select("id, type, title, url, content")
     .eq("user_id", session.user.id)
     .order("position", { ascending: true });
 
@@ -49,7 +50,7 @@ export default async function ThemePage() {
             display_name: profile.display_name,
             bio: profile.bio,
             avatar_url: profile.avatar_url,
-            links: links ?? [],
+            blocks: (blocks ?? []) as Block[],
           }}
         />
       </div>

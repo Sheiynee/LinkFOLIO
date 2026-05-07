@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, Settings, Plus } from "lucide-react";
+import { ExternalLink, Settings, Plus, Palette } from "lucide-react";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
+import type { Block } from "@/lib/blocks";
+import { BLOCK_LABELS } from "@/lib/blocks";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -22,13 +24,15 @@ export default async function DashboardPage() {
 
   if (!profile) redirect("/auth/signin");
 
-  const { data: links } = await supabase
-    .from("links")
-    .select("id, title, url")
+  const { data: blocks } = await supabase
+    .from("blocks")
+    .select("id, type, title, url, content")
     .eq("user_id", session.user.id)
     .order("position", { ascending: true });
 
-  const linkCount = links?.length ?? 0;
+  const blockList = (blocks ?? []) as Block[];
+  const blockCount = blockList.length;
+  const linkCount = blockList.filter((b) => b.type === "link").length;
   const displayName = profile.display_name ?? session.user.name ?? profile.username;
 
   return (
@@ -67,7 +71,10 @@ export default async function DashboardPage() {
           <h1 className="text-2xl font-bold">Dashboard</h1>
           <p className="text-muted-foreground">
             Your page is live at{" "}
-            <Link href={`/${profile.username}`} className="text-purple-600 dark:text-purple-400 font-mono hover:underline">
+            <Link
+              href={`/${profile.username}`}
+              className="text-purple-600 dark:text-purple-400 font-mono hover:underline"
+            >
               /{profile.username}
             </Link>
           </p>
@@ -100,24 +107,32 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>Links</CardTitle>
+              <CardTitle>Content</CardTitle>
               <CardDescription>
-                {linkCount === 0
-                  ? "No links yet — add your first one!"
-                  : `${linkCount} link${linkCount === 1 ? "" : "s"} on your page`}
+                {blockCount === 0
+                  ? "No blocks yet — add your first one!"
+                  : `${blockCount} block${blockCount === 1 ? "" : "s"} (${linkCount} link${linkCount === 1 ? "" : "s"})`}
               </CardDescription>
             </div>
-            <Button size="sm" render={<Link href="/dashboard/links" />}>
+            <Button size="sm" render={<Link href="/dashboard/content" />}>
               <Plus className="h-4 w-4 mr-1" /> Manage
             </Button>
           </CardHeader>
-          {linkCount > 0 && (
+          {blockCount > 0 && (
             <CardContent>
               <ul className="space-y-1">
-                {links!.slice(0, 5).map((l) => (
-                  <li key={l.id} className="flex justify-between text-sm">
-                    <span className="font-medium">{l.title}</span>
-                    <span className="text-muted-foreground truncate ml-4 max-w-xs">{l.url}</span>
+                {blockList.slice(0, 5).map((b) => (
+                  <li key={b.id} className="flex justify-between text-sm gap-4">
+                    <span className="font-medium truncate">
+                      {b.type === "link"
+                        ? b.title
+                        : b.type === "divider"
+                        ? "—"
+                        : b.content}
+                    </span>
+                    <span className="text-muted-foreground text-xs uppercase tracking-wide shrink-0">
+                      {BLOCK_LABELS[b.type]}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -132,7 +147,7 @@ export default async function DashboardPage() {
               <CardDescription>Pick a preset or build your own look</CardDescription>
             </div>
             <Button variant="outline" size="sm" render={<Link href="/dashboard/theme" />}>
-              Customize
+              <Palette className="h-4 w-4 mr-1" /> Customize
             </Button>
           </CardHeader>
         </Card>

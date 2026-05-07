@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ProfileRender, type ProfileRenderData } from "@/components/profile-render";
 import { normalizeTheme } from "@/lib/themes";
+import type { Block } from "@/lib/blocks";
 import type { Metadata } from "next";
 
 interface Props {
@@ -18,13 +19,13 @@ async function getProfile(username: string) {
 
   if (!profile) return null;
 
-  const { data: links } = await supabase
-    .from("links")
-    .select("id, title, url")
+  const { data: blocks } = await supabase
+    .from("blocks")
+    .select("id, type, title, url, content")
     .eq("user_id", profile.id)
     .order("position", { ascending: true });
 
-  return { ...profile, links: links ?? [] };
+  return { ...profile, blocks: (blocks ?? []) as Block[] };
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -52,7 +53,7 @@ export default async function PublicProfilePage({ params }: Props) {
     display_name: profile.display_name,
     bio: profile.bio,
     avatar_url: profile.avatar_url,
-    links: profile.links,
+    blocks: profile.blocks,
   };
 
   return (

@@ -52,7 +52,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       const supabase = createAdminClient();
 
       const { count } = await supabase
-        .from("links")
+        .from("blocks")
         .select("id", { count: "exact", head: true })
         .eq("user_id", user.id);
       if ((count ?? 0) > 0) return;
@@ -77,8 +77,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
       if (title && url) {
         await supabase
-          .from("links")
-          .insert({ user_id: user.id, title, url, icon, position: 0 });
+          .from("blocks")
+          .insert({ user_id: user.id, type: "link", title, url, icon, position: 0 });
       }
     },
   },

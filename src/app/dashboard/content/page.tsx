@@ -5,16 +5,17 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { LinkList } from "./link-list";
+import { BlockList } from "./block-list";
+import type { Block } from "@/lib/blocks";
 
-export default async function LinksPage() {
+export default async function ContentPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/auth/signin");
 
   const supabase = createAdminClient();
-  const { data: links } = await supabase
-    .from("links")
-    .select("id, title, url")
+  const { data: blocks } = await supabase
+    .from("blocks")
+    .select("id, type, title, url, content")
     .eq("user_id", session.user.id)
     .order("position", { ascending: true });
 
@@ -24,16 +25,18 @@ export default async function LinksPage() {
         <Button variant="ghost" size="icon" render={<Link href="/dashboard" />}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <span className="font-bold text-lg">Links</span>
+        <span className="font-bold text-lg">Content</span>
       </header>
       <div className="max-w-2xl mx-auto px-6 py-8">
         <Card>
           <CardHeader>
-            <CardTitle>Your links</CardTitle>
-            <CardDescription>These show up on your public page.</CardDescription>
+            <CardTitle>Your blocks</CardTitle>
+            <CardDescription>
+              Mix links, text, headings, and dividers to build your page. Drag to reorder.
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <LinkList initial={links ?? []} />
+            <BlockList initial={(blocks ?? []) as Block[]} />
           </CardContent>
         </Card>
       </div>
