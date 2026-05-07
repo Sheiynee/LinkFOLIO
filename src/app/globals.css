@@ -6,6 +6,40 @@
   .text-balance {
     text-wrap: balance;
   }
+
+  @keyframes lf-shimmer {
+    0% { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+  .animate-lf-shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted-foreground)) 0%,
+      hsl(var(--foreground)) 50%,
+      hsl(var(--muted-foreground)) 100%
+    );
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: lf-shimmer 2.5s linear infinite;
+  }
+
+  @keyframes lf-bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-6px); opacity: 1; }
+  }
+  .animate-lf-bounce {
+    animation: lf-bounce 1.2s ease-in-out infinite;
+  }
+
+  @keyframes lf-orbit {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  .animate-lf-orbit {
+    animation: lf-orbit 1.4s linear infinite;
+  }
 }
 
 @layer base {

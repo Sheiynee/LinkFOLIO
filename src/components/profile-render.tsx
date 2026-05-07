@@ -45,7 +45,7 @@ export function ProfileRender({
 
   return (
     <div
-      className="min-h-full w-full flex flex-col items-center py-16 px-4"
+      className="min-h-screen w-full flex flex-col items-center py-16 px-4"
       style={containerStyle}
     >
       <div
