@@ -1,9 +1,14 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Link2, Palette, BarChart3, Zap } from "lucide-react";
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const session = await auth();
+  if (session?.user) redirect("/dashboard");
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-950 to-slate-900 text-white">
       {/* Nav */}
