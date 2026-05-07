@@ -5,6 +5,16 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { type BlockType, normalizeUrl } from "@/lib/blocks";
 
+async function revalidatePublicPage(userId: string) {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("profiles")
+    .select("username")
+    .eq("id", userId)
+    .single();
+  if (data?.username) revalidatePath(`/${data.username}`);
+}
+
 interface CreateInput {
   type: BlockType;
   title?: string;
@@ -51,6 +61,7 @@ export async function createBlock(input: CreateInput) {
 
   revalidatePath("/dashboard/content");
   revalidatePath("/dashboard");
+  await revalidatePublicPage(session.user.id);
   return { ok: true, id: data!.id };
 }
 
@@ -99,6 +110,7 @@ export async function updateBlock(input: UpdateInput) {
 
   revalidatePath("/dashboard/content");
   revalidatePath("/dashboard");
+  await revalidatePublicPage(session.user.id);
   return { ok: true };
 }
 
@@ -116,6 +128,7 @@ export async function deleteBlock(id: string) {
 
   revalidatePath("/dashboard/content");
   revalidatePath("/dashboard");
+  await revalidatePublicPage(session.user.id);
   return { ok: true };
 }
 
@@ -137,5 +150,6 @@ export async function reorderBlocks(orderedIds: string[]) {
 
   revalidatePath("/dashboard/content");
   revalidatePath("/dashboard");
+  await revalidatePublicPage(session.user.id);
   return { ok: true };
 }
