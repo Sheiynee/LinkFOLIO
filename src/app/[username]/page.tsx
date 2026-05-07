@@ -5,6 +5,8 @@ import { normalizeTheme } from "@/lib/themes";
 import type { Block } from "@/lib/blocks";
 import type { Metadata } from "next";
 
+export const dynamic = "force-dynamic";
+
 interface Props {
   params: { username: string };
 }
