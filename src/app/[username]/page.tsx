@@ -1,60 +1,72 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink } from "lucide-react";
+import { notFound } from "next/navigation";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { Metadata } from "next";
 
 interface Props {
   params: { username: string };
 }
 
-// Dynamic OG meta per user
+async function getProfile(username: string) {
+  const supabase = createAdminClient();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, username, display_name, bio, avatar_url, theme")
+    .eq("username", username.toLowerCase())
+    .maybeSingle();
+
+  if (!profile) return null;
+
+  const { data: links } = await supabase
+    .from("links")
+    .select("id, title, url")
+    .eq("user_id", profile.id)
+    .order("position", { ascending: true });
+
+  return { ...profile, links: links ?? [] };
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { username } = params;
+  const profile = await getProfile(params.username);
+  if (!profile) return { title: "Not found — LinkFolio" };
+  const name = profile.display_name ?? profile.username;
   return {
-    title: `${username} — LinkFolio`,
-    description: `Check out ${username}'s personal page on LinkFolio`,
+    title: `${name} — LinkFolio`,
+    description: profile.bio ?? `${name}'s personal page on LinkFolio`,
     openGraph: {
-      title: `${username} on LinkFolio`,
-      description: `Links, projects, and more from ${username}`,
+      title: `${name} on LinkFolio`,
+      description: profile.bio ?? `Links and more from ${name}`,
+      images: profile.avatar_url ? [profile.avatar_url] : undefined,
     },
   };
 }
 
-// Placeholder — will be replaced with real Supabase fetch
-async function getProfile(username: string) {
-  return {
-    name: username,
-    bio: "Welcome to my LinkFolio page! I'll add my links soon.",
-    avatar: null as string | null,
-    links: [] as { id: string; title: string; url: string }[],
-    theme: "purple" as const,
-  };
-}
-
 export default async function PublicProfilePage({ params }: Props) {
-  const { username } = params;
-  const profile = await getProfile(username);
+  const profile = await getProfile(params.username);
+  if (!profile) notFound();
+
+  const name = profile.display_name ?? profile.username;
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-purple-950 to-slate-900 flex flex-col items-center py-16 px-4">
-      {/* Avatar */}
       <Avatar className="h-24 w-24 mb-4 ring-4 ring-purple-500/40">
-        <AvatarImage src={profile.avatar ?? ""} />
+        <AvatarImage src={profile.avatar_url ?? ""} />
         <AvatarFallback className="text-3xl bg-purple-800 text-white">
-          {profile.name[0]?.toUpperCase()}
+          {name[0]?.toUpperCase()}
         </AvatarFallback>
       </Avatar>
 
-      {/* Name + username */}
-      <h1 className="text-2xl font-bold text-white mb-1">{profile.name}</h1>
+      <h1 className="text-2xl font-bold text-white mb-1">{name}</h1>
       <Badge className="mb-4 bg-purple-900/60 text-purple-200 border-purple-700">
-        @{username}
+        @{profile.username}
       </Badge>
 
-      {/* Bio */}
-      <p className="text-slate-300 text-center max-w-sm mb-8">{profile.bio}</p>
+      {profile.bio && (
+        <p className="text-slate-300 text-center max-w-sm mb-8">{profile.bio}</p>
+      )}
 
-      {/* Links */}
       <div className="w-full max-w-sm space-y-3">
         {profile.links.length === 0 ? (
           <p className="text-slate-500 text-center text-sm">No links added yet.</p>
@@ -74,7 +86,6 @@ export default async function PublicProfilePage({ params }: Props) {
         )}
       </div>
 
-      {/* Footer branding */}
       <p className="mt-12 text-slate-600 text-xs">
         Powered by <span className="text-purple-400 font-medium">LinkFolio</span>
       </p>
