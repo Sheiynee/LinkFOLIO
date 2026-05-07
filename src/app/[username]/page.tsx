@@ -1,8 +1,7 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { ExternalLink } from "lucide-react";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ProfileRender, type ProfileRenderData } from "@/components/profile-render";
+import { normalizeTheme } from "@/lib/themes";
 import type { Metadata } from "next";
 
 interface Props {
@@ -47,48 +46,18 @@ export default async function PublicProfilePage({ params }: Props) {
   const profile = await getProfile(params.username);
   if (!profile) notFound();
 
-  const name = profile.display_name ?? profile.username;
+  const theme = normalizeTheme(profile.theme);
+  const data: ProfileRenderData = {
+    username: profile.username,
+    display_name: profile.display_name,
+    bio: profile.bio,
+    avatar_url: profile.avatar_url,
+    links: profile.links,
+  };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-purple-950 to-slate-900 flex flex-col items-center py-16 px-4">
-      <Avatar className="h-24 w-24 mb-4 ring-4 ring-purple-500/40">
-        <AvatarImage src={profile.avatar_url ?? ""} />
-        <AvatarFallback className="text-3xl bg-purple-800 text-white">
-          {name[0]?.toUpperCase()}
-        </AvatarFallback>
-      </Avatar>
-
-      <h1 className="text-2xl font-bold text-white mb-1">{name}</h1>
-      <Badge className="mb-4 bg-purple-900/60 text-purple-200 border-purple-700">
-        @{profile.username}
-      </Badge>
-
-      {profile.bio && (
-        <p className="text-slate-300 text-center max-w-sm mb-8">{profile.bio}</p>
-      )}
-
-      <div className="w-full max-w-sm space-y-3">
-        {profile.links.length === 0 ? (
-          <p className="text-slate-500 text-center text-sm">No links added yet.</p>
-        ) : (
-          profile.links.map((link) => (
-            <a
-              key={link.id}
-              href={link.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-between w-full bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl px-5 py-3 text-white transition"
-            >
-              <span className="font-medium">{link.title}</span>
-              <ExternalLink className="h-4 w-4 text-slate-400" />
-            </a>
-          ))
-        )}
-      </div>
-
-      <p className="mt-12 text-slate-600 text-xs">
-        Powered by <span className="text-purple-400 font-medium">LinkFolio</span>
-      </p>
+    <main className="min-h-screen">
+      <ProfileRender profile={data} theme={theme} />
     </main>
   );
 }

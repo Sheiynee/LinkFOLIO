@@ -129,9 +129,9 @@ export default async function DashboardPage() {
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Theme</CardTitle>
-              <CardDescription>Customize your public page (coming soon)</CardDescription>
+              <CardDescription>Pick a preset or build your own look</CardDescription>
             </div>
-            <Button variant="outline" size="sm" disabled>
+            <Button variant="outline" size="sm" render={<Link href="/dashboard/theme" />}>
               Customize
             </Button>
           </CardHeader>

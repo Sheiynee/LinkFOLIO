@@ -68,6 +68,27 @@ export async function updateLink(formData: FormData) {
   return { ok: true };
 }
 
+export async function reorderLinks(orderedIds: string[]) {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Not authenticated" };
+
+  const supabase = createAdminClient();
+  const updates = orderedIds.map((id, index) =>
+    supabase
+      .from("links")
+      .update({ position: index })
+      .eq("id", id)
+      .eq("user_id", session.user.id!)
+  );
+  const results = await Promise.all(updates);
+  const failed = results.find((r) => r.error);
+  if (failed?.error) return { error: failed.error.message };
+
+  revalidatePath("/dashboard/links");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
 export async function deleteLink(formData: FormData) {
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated" };
