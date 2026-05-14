@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, Settings, Plus, Palette, Eye, MousePointerClick } from "lucide-react";
+import { ExternalLink, Settings, Plus, Palette, Eye, MousePointerClick, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { Block } from "@/lib/blocks";
@@ -99,6 +99,24 @@ export default async function DashboardPage() {
             </Link>
           </p>
         </div>
+
+        {blockCount === 0 && (
+          <Card className="border-foreground/20 bg-gradient-to-br from-purple-500/5 to-pink-500/5">
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5" /> Quick start
+                </CardTitle>
+                <CardDescription>
+                  Build a populated page in under 90 seconds — pick an archetype, paste your platform links, pick a color and font.
+                </CardDescription>
+              </div>
+              <Button render={<Link href="/onboarding" />}>
+                Start <Sparkles className="h-4 w-4 ml-1" />
+              </Button>
+            </CardHeader>
+          </Card>
+        )}
 
         <OnboardingChecklist
           hasBlocks={blockCount > 0}
