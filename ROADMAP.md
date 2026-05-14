@@ -77,6 +77,8 @@ Target users, in order: Twitch streamers → YouTubers / video creators → musi
 - **Optimistic UI** — `createWidgetBlock` returns the resolved kind/meta/title so the new dashboard row shows its real label immediately
 - **Tab-focus revalidation** — pages with a live widget call `router.refresh()` when the tab returns to focus after >30s of being hidden
 - **Theme-editor previews** — preview pane on `/dashboard/theme` pre-fetches widget data server-side, so widgets render with real data instead of "not found" placeholders
+- **Size variants** — every widget supports `compact` (one-line pill), `default`, and `featured` (with hero image where applicable). Per-block toggle in the editor.
+- **"Updated Xm ago" freshness indicator** on Twitch live, Twitch VOD, and YouTube live widgets, client-side auto-ticking every 30s
 - **13 widget kinds live**:
   - **Twitch live status** — pulsing badge, viewers, game (30s revalidate)
   - **Twitch latest VOD** — thumbnail + view count + time-ago (5m); handles fresh "still-processing" VODs with a clean fallback
@@ -119,16 +121,16 @@ Each step is skippable; Back navigates without losing state. Dashboard surfaces 
 
 ## 🚧 Phase 1 polish (remaining)
 
-The widget catalogue + auto-detect + edit + tab-focus revalidation shipped. What's left makes live widgets feel alive at scale.
+Most of Phase 1 + the widget catalogue + freshness indicators + size variants shipped. What's left couples to a webhook subsystem.
 
-### Live-data freshness — phase 2
-- **Visible "updated 2 min ago" indicator** on live widgets so static-looking states don't feel broken
-- **Twitch EventSub**: subscribe to `stream.online` / `stream.offline` events for known streamers. Webhook updates a `creator_live_status` table; pages read from it. Removes polling cost at scale.
-- **Smart polling**: only revalidate for creators whose pages were viewed in the last 5 minutes
-- **Graceful degradation**: API down → show last known state with subtle "last seen" note. Never render a broken widget.
+### Live-data freshness — phase 3 (webhook-driven)
+- **Twitch EventSub**: subscribe to `stream.online` / `stream.offline` events for known streamers. Webhook endpoint with HMAC signature verification, secret rotation, subscription management. Updates a `creator_live_status` table; pages read from it. Removes polling cost at scale.
+- **Smart polling**: only revalidate for creators whose pages were viewed in the last 5 minutes (`page_views`-derived hot set)
+- **Graceful degradation**: API down → show last known state with subtle "last seen" note. Needs the `creator_live_status` persistence table from EventSub.
 
-### Tier 2 widgets — still deferred to Phase 6 (need OAuth or evolving APIs)
-- Spotify "now playing" (per-user OAuth + token refresh)
+### Tier 2 widgets — deferred to Phase 6 (need OAuth or evolving APIs)
+Most need per-user OAuth + token refresh, which is meaningful infra. Defer until there's user demand:
+- Spotify "now playing"
 - Steam profile (recently played, achievements)
 - Last.fm scrobbles
 - Strava recent activities
@@ -136,9 +138,6 @@ The widget catalogue + auto-detect + edit + tab-focus revalidation shipped. What
 - Twitter/X embeds (when API stabilizes)
 - Kick live status (API still maturing)
 - Instagram latest post (API limitations)
-
-### Widget size variants
-- Multiple size variants per widget (1×1 small, 2×1 wide, 2×2 large) with consistent visual weight at each size. Currently every widget is one width.
 
 ---
 
@@ -329,6 +328,11 @@ Deferred from Phase 3, ships here.
 
 ### Cross-promotion blocks
 - "Also on TikTok," "Subscribe on YouTube," "Follow on Spotify" as themed CTAs (not generic links — branded, animated, contextual)
+
+### Instagram Story share button
+- One-tap "Share to Instagram Story" from the creator's dashboard. Generates a 1080×1920 themed image (same engine as OG images, different aspect ratio + composition for vertical) and uses Instagram's Story sharing intent / deep link. Boosts reach via the creator's own followers and is cheaper marketing than paid acquisition.
+- Optionally: a "Share my LinkFolio" widget on the public page for visitors to repost the page card on their own stories.
+- Requires: dedicated `/api/og/[username]/story` route producing a 1080×1920 PNG, plus the Instagram Stories `instagram-stories://share` intent for iOS / `intent://share?...#Intent;...end` for Android. Web fallback: a download button so creators can post manually.
 
 ### Account
 - Change email (signed token verification)
