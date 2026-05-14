@@ -7,6 +7,9 @@ import { type BlockType, normalizeUrl } from "@/lib/blocks";
 import type { WidgetKind } from "@/lib/widgets/types";
 import { parseTwitchChannel } from "@/lib/widgets/twitch";
 import { parseYouTubeUrl } from "@/lib/widgets/youtube";
+import { parseGitHubUrl } from "@/lib/widgets/github";
+import { parseDiscordInvite } from "@/lib/widgets/discord";
+import { parseTipJarUrl, TIP_PLATFORMS } from "@/lib/widgets/tip-jar";
 import { detectWidgetFromUrl } from "@/lib/widgets/detect";
 
 async function revalidatePublicPage(userId: string) {
@@ -205,6 +208,46 @@ function resolveWidget(kind: WidgetKind | "auto", input: string): ResolveResult 
       };
     }
     return { error: "Enter a YouTube video URL or channel" };
+  }
+
+  if (kind === "github_repo") {
+    const gh = parseGitHubUrl(trimmed);
+    if (gh?.kind === "github_repo" && gh.owner && gh.repo) {
+      return { kind, meta: { owner: gh.owner, repo: gh.repo }, title: `${gh.owner}/${gh.repo}` };
+    }
+    const m = trimmed.match(/^([a-zA-Z0-9-]{1,39})\/([a-zA-Z0-9._-]{1,100})$/);
+    if (m) return { kind, meta: { owner: m[1], repo: m[2] }, title: trimmed };
+    return { error: "Enter owner/repo or a github.com URL" };
+  }
+
+  if (kind === "github_user") {
+    const gh = parseGitHubUrl(trimmed);
+    if (gh?.kind === "github_user" && gh.username) {
+      return { kind, meta: { username: gh.username }, title: `@${gh.username}` };
+    }
+    if (/^@?[a-zA-Z0-9-]{1,39}$/.test(trimmed)) {
+      const username = trimmed.replace(/^@/, "");
+      return { kind, meta: { username }, title: `@${username}` };
+    }
+    return { error: "Enter a GitHub username or profile URL" };
+  }
+
+  if (kind === "discord_invite") {
+    const code = parseDiscordInvite(trimmed);
+    if (code) return { kind, meta: { invite_code: code }, title: "Discord server" };
+    return { error: "Enter a discord.gg invite link or code" };
+  }
+
+  if (kind === "tip_jar") {
+    const tip = parseTipJarUrl(trimmed);
+    if (tip) {
+      return {
+        kind,
+        meta: { platform: tip.platform, handle: tip.handle },
+        title: `Tip on ${TIP_PLATFORMS[tip.platform].label}`,
+      };
+    }
+    return { error: "Paste a Ko-fi, Buy Me a Coffee, Patreon, or Streamlabs URL" };
   }
 
   return { error: "Widget kind not implemented yet" };

@@ -21,6 +21,9 @@ import {
   Sparkles,
   Youtube,
   Wand2,
+  Github,
+  MessageCircle,
+  Coffee,
 } from "lucide-react";
 import { createBlock, createWidgetBlock, updateBlock, deleteBlock, reorderBlocks, toggleBlockVisibility } from "./actions";
 import type { Block, BlockType } from "@/lib/blocks";
@@ -273,19 +276,45 @@ export function BlockList({ initial }: { initial: Block[] }) {
   );
 }
 
-type WidgetPickerKind = "auto" | "twitch_live" | "youtube_channel" | "youtube_video";
+type WidgetPickerKind =
+  | "auto"
+  | "twitch_live"
+  | "youtube_channel"
+  | "youtube_video"
+  | "github_repo"
+  | "github_user"
+  | "discord_invite"
+  | "tip_jar";
 
 function widgetKindLabel(kind: Block["widget_kind"]): string {
   switch (kind) {
     case "twitch_live": return "Twitch live";
     case "youtube_channel": return "YouTube channel";
     case "youtube_video": return "YouTube video";
+    case "github_repo": return "GitHub repo";
+    case "github_user": return "GitHub user";
+    case "discord_invite": return "Discord invite";
+    case "tip_jar": return "Tip jar";
     default: return "Widget";
   }
 }
 
 function widgetSubtitle(block: Block): string {
-  const meta = (block.meta ?? {}) as { channel?: string; handle?: string; channel_id?: string; video_id?: string };
+  const meta = (block.meta ?? {}) as {
+    channel?: string;
+    handle?: string;
+    channel_id?: string;
+    video_id?: string;
+    owner?: string;
+    repo?: string;
+    username?: string;
+    invite_code?: string;
+    platform?: string;
+  };
+  if (meta.owner && meta.repo) return `${meta.owner}/${meta.repo}`;
+  if (meta.username) return `@${meta.username}`;
+  if (meta.invite_code) return `discord.gg/${meta.invite_code}`;
+  if (meta.platform && meta.handle) return `${meta.platform}/${meta.handle}`;
   if (meta.channel) return meta.channel;
   if (meta.handle) return `@${meta.handle}`;
   if (meta.channel_id) return meta.channel_id;
@@ -298,20 +327,32 @@ const WIDGET_LABELS: Record<WidgetPickerKind, string> = {
   twitch_live: "Twitch live status",
   youtube_channel: "YouTube channel",
   youtube_video: "YouTube latest video",
+  github_repo: "GitHub repo",
+  github_user: "GitHub user",
+  discord_invite: "Discord invite",
+  tip_jar: "Tip jar",
 };
 
 const WIDGET_PLACEHOLDERS: Record<WidgetPickerKind, string> = {
-  auto: "Paste a twitch.tv or youtube.com URL",
+  auto: "Paste any supported URL",
   twitch_live: "shroud or https://twitch.tv/shroud",
   youtube_channel: "@mkbhd or https://youtube.com/@mkbhd",
   youtube_video: "https://youtube.com/watch?v=…  (or a channel URL for latest)",
+  github_repo: "vercel/next.js or https://github.com/vercel/next.js",
+  github_user: "@torvalds or https://github.com/torvalds",
+  discord_invite: "https://discord.gg/xxxx or just the code",
+  tip_jar: "https://ko-fi.com/yourname (or BMaC, Patreon, Streamlabs)",
 };
 
 const WIDGET_HINTS: Record<WidgetPickerKind, string> = {
-  auto: "We'll figure out which widget to add. Currently supports Twitch and YouTube URLs.",
+  auto: "We'll figure out which widget to add. Supports Twitch, YouTube, GitHub, Discord, Ko-fi, BMaC, Patreon, Streamlabs.",
   twitch_live: "Shows a live indicator + viewer count when the channel is streaming.",
   youtube_channel: "Shows subscriber count and links to the channel.",
   youtube_video: "Embeds the most recent upload — or pin a specific video by pasting its URL.",
+  github_repo: "Shows stars, forks, language. Updated every 10 min.",
+  github_user: "Shows followers + public repo count.",
+  discord_invite: "Shows server name, member count, and online count. Auto-refreshes.",
+  tip_jar: "Branded button to your tip platform. Detects Ko-fi, BMaC, Patreon, Streamlabs.",
 };
 
 function WidgetPicker({
@@ -369,6 +410,46 @@ function WidgetPicker({
         >
           <Youtube className="h-4 w-4 mr-2" />
           YouTube latest video
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPick("github_repo")}
+          className="justify-start"
+        >
+          <Github className="h-4 w-4 mr-2" />
+          GitHub repo
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPick("github_user")}
+          className="justify-start"
+        >
+          <Github className="h-4 w-4 mr-2" />
+          GitHub user
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPick("discord_invite")}
+          className="justify-start"
+        >
+          <MessageCircle className="h-4 w-4 mr-2" />
+          Discord invite
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPick("tip_jar")}
+          className="justify-start"
+        >
+          <Coffee className="h-4 w-4 mr-2" />
+          Tip jar
         </Button>
       </div>
     </div>

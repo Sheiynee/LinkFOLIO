@@ -7,6 +7,8 @@ import type { Block } from "@/lib/blocks";
 import type { WidgetData } from "@/lib/widgets/types";
 import { getTwitchLiveStatus } from "@/lib/widgets/twitch";
 import { getYouTubeChannel, getYouTubeLatestVideo } from "@/lib/widgets/youtube";
+import { getGitHubRepo, getGitHubUser } from "@/lib/widgets/github";
+import { getDiscordInvite } from "@/lib/widgets/discord";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +60,28 @@ async function loadWidgetData(blocks: Block[]): Promise<Record<string, WidgetDat
         const meta = (block.meta ?? {}) as { video_id?: string; channel_id?: string; handle?: string };
         const data = await getYouTubeLatestVideo(meta);
         return [block.id, { kind: "youtube_video", data }];
+      }
+      if (block.widget_kind === "github_repo") {
+        const meta = (block.meta ?? {}) as { owner?: string; repo?: string };
+        if (!meta.owner || !meta.repo) return null;
+        const data = await getGitHubRepo(meta.owner, meta.repo);
+        return [block.id, { kind: "github_repo", data }];
+      }
+      if (block.widget_kind === "github_user") {
+        const meta = (block.meta ?? {}) as { username?: string };
+        if (!meta.username) return null;
+        const data = await getGitHubUser(meta.username);
+        return [block.id, { kind: "github_user", data }];
+      }
+      if (block.widget_kind === "discord_invite") {
+        const meta = (block.meta ?? {}) as { invite_code?: string };
+        if (!meta.invite_code) return null;
+        const data = await getDiscordInvite(meta.invite_code);
+        return [block.id, { kind: "discord_invite", data }];
+      }
+      if (block.widget_kind === "tip_jar") {
+        // No data fetch — pure deep link with platform branding
+        return [block.id, { kind: "tip_jar", data: null }];
       }
       return null;
     })

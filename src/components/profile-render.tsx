@@ -10,6 +10,11 @@ import type { WidgetData } from "@/lib/widgets/types";
 import { TwitchLiveWidget } from "./widgets/twitch-live-widget";
 import { YouTubeChannelWidget } from "./widgets/youtube-channel-widget";
 import { YouTubeVideoWidget } from "./widgets/youtube-video-widget";
+import { GitHubRepoWidget } from "./widgets/github-repo-widget";
+import { GitHubUserWidget } from "./widgets/github-user-widget";
+import { DiscordInviteWidget } from "./widgets/discord-invite-widget";
+import { TipJarWidget } from "./widgets/tip-jar-widget";
+import type { TipPlatform } from "@/lib/widgets/types";
 
 export interface ProfileRenderData {
   username: string;
@@ -183,6 +188,64 @@ export function ProfileRender({
                       key={block.id}
                       data={data}
                       fallbackUrl={fallbackUrl}
+                      theme={theme}
+                      preview={preview}
+                    />
+                  );
+                }
+                if (block.widget_kind === "github_repo") {
+                  const meta = (block.meta ?? {}) as { owner?: string; repo?: string };
+                  const fallbackUrl = meta.owner && meta.repo
+                    ? `https://github.com/${meta.owner}/${meta.repo}`
+                    : "https://github.com";
+                  const data = wd?.kind === "github_repo" ? wd.data : null;
+                  return (
+                    <GitHubRepoWidget
+                      key={block.id}
+                      data={data}
+                      fallbackUrl={fallbackUrl}
+                      theme={theme}
+                      preview={preview}
+                    />
+                  );
+                }
+                if (block.widget_kind === "github_user") {
+                  const meta = (block.meta ?? {}) as { username?: string };
+                  const fallbackUrl = meta.username
+                    ? `https://github.com/${meta.username}`
+                    : "https://github.com";
+                  const data = wd?.kind === "github_user" ? wd.data : null;
+                  return (
+                    <GitHubUserWidget
+                      key={block.id}
+                      data={data}
+                      fallbackUrl={fallbackUrl}
+                      theme={theme}
+                      preview={preview}
+                    />
+                  );
+                }
+                if (block.widget_kind === "discord_invite") {
+                  const meta = (block.meta ?? {}) as { invite_code?: string };
+                  const data = wd?.kind === "discord_invite" ? wd.data : null;
+                  return (
+                    <DiscordInviteWidget
+                      key={block.id}
+                      inviteCode={meta.invite_code ?? ""}
+                      data={data}
+                      theme={theme}
+                      preview={preview}
+                    />
+                  );
+                }
+                if (block.widget_kind === "tip_jar") {
+                  const meta = (block.meta ?? {}) as { platform?: TipPlatform; handle?: string };
+                  if (!meta.platform || !meta.handle) return null;
+                  return (
+                    <TipJarWidget
+                      key={block.id}
+                      platform={meta.platform}
+                      handle={meta.handle}
                       theme={theme}
                       preview={preview}
                     />

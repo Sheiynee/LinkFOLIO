@@ -67,8 +67,46 @@ export interface YouTubeVideoData {
   };
 }
 
+export interface GitHubRepoData {
+  full_name: string;
+  description: string | null;
+  stargazers_count: number;
+  forks_count: number;
+  language: string | null;
+  owner: { login: string; avatar_url: string };
+  html_url: string;
+}
+
+export interface GitHubUserData {
+  login: string;
+  name: string | null;
+  bio: string | null;
+  avatar_url: string;
+  followers: number;
+  public_repos: number;
+  html_url: string;
+}
+
+export interface DiscordInviteData {
+  guild: { name: string; icon_url: string | null };
+  approximate_member_count: number | null;
+  approximate_presence_count: number | null;
+  invite_code: string;
+}
+
+export type TipPlatform = "kofi" | "bmac" | "patreon" | "streamlabs";
+
+export interface TipJarMeta {
+  platform: TipPlatform;
+  handle: string;
+}
+
 export type WidgetData =
   | { kind: "twitch_live"; data: TwitchLiveData | null }
   | { kind: "youtube_channel"; data: YouTubeChannelData | null }
   | { kind: "youtube_video"; data: YouTubeVideoData | null }
+  | { kind: "github_repo"; data: GitHubRepoData | null }
+  | { kind: "github_user"; data: GitHubUserData | null }
+  | { kind: "discord_invite"; data: DiscordInviteData | null }
+  | { kind: "tip_jar"; data: null }
   | { kind: "unsupported"; data: null };
