@@ -77,7 +77,7 @@ export function ThemeEditor({ initialTheme, profile }: Props) {
     <div className="grid lg:grid-cols-[1fr_minmax(320px,420px)] gap-6">
       <div className="space-y-6">
         <Card className="p-4">
-          <Tabs defaultValue="presets" className="!flex-col">
+          <Tabs defaultValue="presets">
             <TabsList className="w-full justify-start flex-wrap h-auto">
               <TabsTrigger value="presets">Presets</TabsTrigger>
               <TabsTrigger value="colors">Colors</TabsTrigger>

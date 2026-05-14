@@ -439,11 +439,7 @@ These come up often. Saying no is part of the strategy.
 ## 🧹 Tech debt
 
 - `src/app/auth/signin/page.tsx` — replace with branded signin once design system stabilizes
-- `src/lib/supabase/server.ts` and `client.ts` — referenced but unused. Remove or repurpose for RLS-aware reads.
-- `src/components/ui/tabs.tsx` — `!flex-col` override is a band-aid; fix the base-ui variant + Tailwind config mismatch
-- README is still create-next-app default — needs LinkFolio setup instructions
-- Old `links` table — already dropped manually; clean up references in old SQL files
-- Mixed line endings (CRLF warnings) — add `.gitattributes`
+- Old `links` table — already dropped manually; references remain in historical migrations `02_app_schema.sql` and `05_blocks.sql`. Add a defensive `drop table if exists public.links` in a future migration rather than editing applied ones.
 
 ---
 
