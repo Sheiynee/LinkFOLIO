@@ -85,13 +85,21 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const profile = await getProfile(params.username);
   if (!profile) return { title: "Not found — LinkFolio" };
   const name = profile.display_name ?? profile.username;
+  const ogImage = `/api/og/${profile.username}`;
   return {
     title: `${name} — LinkFolio`,
     description: profile.bio ?? `${name}'s personal page on LinkFolio`,
     openGraph: {
       title: `${name} on LinkFolio`,
       description: profile.bio ?? `Links and more from ${name}`,
-      images: profile.avatar_url ? [profile.avatar_url] : undefined,
+      images: [{ url: ogImage, width: 1200, height: 630 }],
+      type: "profile",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${name} on LinkFolio`,
+      description: profile.bio ?? `Links and more from ${name}`,
+      images: [ogImage],
     },
   };
 }

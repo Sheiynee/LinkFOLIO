@@ -182,6 +182,12 @@ Examples: Editorial · Brutalist · Soft · Tech · Magazine · Handwritten · M
 
 ## 🟠 Phase 3 — Make it look genuinely different
 
+### QOL carry-over from Phase 1
+- Edit widget metadata in place (currently delete-and-re-add)
+- Widget previews in the theme editor pane
+- Optimistic UI returns resolved widget metadata so the dashboard list shows the right label immediately
+
+
 Visual depth is the moat against Linktree and the parity feature against Bento. Pages on LinkFolio should be unmistakably *not templates*.
 
 ### Typography subsystem (replaces flat font picker)

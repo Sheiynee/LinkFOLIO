@@ -15,7 +15,14 @@ const geistMono = localFont({
   weight: "100 900",
 });
 
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : "http://localhost:3000");
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "LinkFolio — Your personal page, your way",
   description: "Create a beautiful personal page with all your links, widgets, and more.",
 };
