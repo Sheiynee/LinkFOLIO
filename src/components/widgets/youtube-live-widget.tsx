@@ -1,5 +1,6 @@
 import type { YouTubeLiveData } from "@/lib/widgets/types";
 import type { Theme } from "@/lib/themes";
+import { UpdatedAgo } from "./updated-ago";
 
 export function YouTubeLiveWidget({
   data,
@@ -89,6 +90,11 @@ export function YouTubeLiveWidget({
             </p>
           )}
         </div>
+        {data && (
+          <div className="self-start">
+            <UpdatedAgo fetchedAt={data.fetched_at} color={theme.muted_color} />
+          </div>
+        )}
       </div>
     </a>
   );

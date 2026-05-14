@@ -125,6 +125,7 @@ export async function getTwitchLiveStatus(channel: string): Promise<TwitchLiveDa
           thumbnail_url: stream.thumbnail_url,
         }
       : null,
+    fetched_at: new Date().toISOString(),
   };
 }
 
@@ -168,6 +169,7 @@ export async function getTwitchLatestVod(channel: string): Promise<TwitchVodData
           view_count: vod.view_count,
         }
       : null,
+    fetched_at: new Date().toISOString(),
   };
 }
 

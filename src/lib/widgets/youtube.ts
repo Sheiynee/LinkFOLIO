@@ -181,6 +181,7 @@ export async function getYouTubeLiveStatus(
       custom_url: channelItem.snippet.customUrl ?? null,
     },
     live: liveVideo,
+    fetched_at: new Date().toISOString(),
   };
 }
 

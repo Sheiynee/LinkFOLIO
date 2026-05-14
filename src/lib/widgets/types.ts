@@ -27,11 +27,13 @@ export interface TwitchVodData {
     published_at: string;
     view_count: number;
   } | null;
+  fetched_at: string;
 }
 
 export interface YouTubeLiveData {
   channel: { id: string; title: string; thumbnail_url: string; custom_url: string | null };
   live: { video_id: string; title: string; thumbnail_url: string } | null;
+  fetched_at: string;
 }
 
 export interface OgCardData {
@@ -56,6 +58,7 @@ export interface TwitchLiveData {
     started_at: string;
     thumbnail_url: string;
   } | null;
+  fetched_at: string;
 }
 
 export interface YouTubeChannelMeta {

@@ -1,5 +1,6 @@
 import type { TwitchLiveData } from "@/lib/widgets/types";
 import type { Theme } from "@/lib/themes";
+import { UpdatedAgo } from "./updated-ago";
 
 export function TwitchLiveWidget({
   channel,
@@ -81,6 +82,11 @@ export function TwitchLiveWidget({
             </p>
           )}
         </div>
+        {data && (
+          <div className="self-start">
+            <UpdatedAgo fetchedAt={data.fetched_at} color={theme.muted_color} />
+          </div>
+        )}
       </div>
     </a>
   );

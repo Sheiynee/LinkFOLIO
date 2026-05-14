@@ -1,5 +1,6 @@
 import type { TwitchVodData } from "@/lib/widgets/types";
 import type { Theme } from "@/lib/themes";
+import { UpdatedAgo } from "./updated-ago";
 
 export function TwitchVodWidget({
   channel,
@@ -70,11 +71,16 @@ export function TwitchVodWidget({
         <p className="text-sm font-medium line-clamp-2" style={{ color: theme.text_color }}>
           {vod?.title ?? "Latest VOD"}
         </p>
-        {user && (
-          <p className="text-xs truncate" style={{ color: theme.muted_color }}>
-            {user.display_name}
-          </p>
-        )}
+        <div className="flex items-center justify-between gap-2">
+          {user ? (
+            <p className="text-xs truncate" style={{ color: theme.muted_color }}>
+              {user.display_name}
+            </p>
+          ) : <span />}
+          {data && (
+            <UpdatedAgo fetchedAt={data.fetched_at} color={theme.muted_color} />
+          )}
+        </div>
       </div>
     </a>
   );
