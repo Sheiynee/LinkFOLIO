@@ -67,26 +67,42 @@ Target users, in order: Twitch streamers → YouTubers / video creators → musi
 - Dark/light mode toggle (`next-themes`)
 - Branded loader on every route transition
 
-### Creator widgets (Phase 1 shipped)
+### Creator widgets (Phase 1 shipped in full)
 - New block kind `widget` with `widget_kind` enum + `meta jsonb` config
-- Server-side fetch with per-kind cache windows (30s for live status, 5–30m for static metadata)
+- Server-side fetch with per-kind cache windows (30s–1h depending on liveness)
 - Theme-aware rendering — every widget inherits the page's palette via inline styles, brand identity preserved through icon + small `tag` chip
 - Pre-fetch all widget data in parallel before rendering the public page
-- Provider token cache table (`app_tokens`) for Twitch app access token
-- 10 widget kinds live:
+- Provider token cache table (`app_tokens`) for the Twitch app access token
+- **Inline widget edit** — pencil icon prefills the existing handle/URL and lets you swap the source
+- **Optimistic UI** — `createWidgetBlock` returns the resolved kind/meta/title so the new dashboard row shows its real label immediately
+- **Tab-focus revalidation** — pages with a live widget call `router.refresh()` when the tab returns to focus after >30s of being hidden
+- **Theme-editor previews** — preview pane on `/dashboard/theme` pre-fetches widget data server-side, so widgets render with real data instead of "not found" placeholders
+- **13 widget kinds live**:
   - **Twitch live status** — pulsing badge, viewers, game (30s revalidate)
+  - **Twitch latest VOD** — thumbnail + view count + time-ago (5m); handles fresh "still-processing" VODs with a clean fallback
   - **YouTube channel** — subscriber + video count (1h)
   - **YouTube latest video** — thumbnail, title, view count, time-ago (5m)
+  - **YouTube live status** — pulsing LIVE badge when broadcasting (1m); uses uploads-playlist + videos.list (3 quota units) instead of search.list (100 units)
   - **GitHub repo** — stars, forks, language, description (10m)
   - **GitHub user** — followers + public repo count (30m)
   - **Discord invite** — member + online count (5m)
   - **Spotify embed** — real iframe player for track/album/artist/playlist/episode/show
   - **TikTok video** — branded gradient card linking out
   - **Tip jar** — Ko-fi, Buy Me a Coffee, Patreon, Streamlabs (deep links with brand colors)
+  - **Generic OG card** — `<meta property="og:*">` scrape for any URL, with SSRF protection (DNS pre-resolution, private-IP rejection, 5s timeout, 512KB body cap, content-type filter)
 
 ### URL auto-detect on paste
 - One paste-any-URL widget option resolves to the right widget kind + metadata
-- Detects: `twitch.tv/{user}`, `youtube.com/@handle`, `youtube.com/channel/UC…`, `youtube.com/watch?v=…`, `youtu.be/…`, `youtube.com/shorts/…`, `github.com/owner`, `github.com/owner/repo`, `discord.gg/x`, `open.spotify.com/{type}/{id}`, `spotify:` URIs, `tiktok.com/@user/video/…`, and `ko-fi/buymeacoffee/patreon/streamlabs.com/x`
+- Detects: `twitch.tv/{user}`, `youtube.com/@handle`, `youtube.com/channel/UC…`, `youtube.com/watch?v=…`, `youtu.be/…`, `youtube.com/shorts/…`, `github.com/owner`, `github.com/owner/repo`, `discord.gg/x`, `open.spotify.com/{type}/{id}`, `spotify:` URIs, `tiktok.com/@user/video/…`, `ko-fi/buymeacoffee/patreon/streamlabs.com/x`, and any other valid http(s) URL as a generic OG card fallback
+
+### Onboarding archetype flow (Phase 2 shipped)
+Four-step flow at `/onboarding` delivers the 90-second-to-shareable-page promise:
+1. **Archetype picker** — Streamer · YouTuber · Musician · Podcaster · Visual Artist · Game Dev · Other. Each archetype declares a default theme preset and which platform inputs to surface in step 2.
+2. **Platform URL paste** — one input per archetype-relevant platform. Each non-empty URL runs through `detectWidgetFromUrl` and auto-creates the matching widget block.
+3. **Brand color seed** — 8 swatches + native color picker with live gradient preview. Backend derives bg gradient stops + accent + muted colors via HSL transforms in `lib/palette.ts`.
+4. **Typography pairing** — 12 curated pairings (`lib/type-pairings.ts`) → sets the page font. Examples: Editorial · Tech · Modernist · Soft · Serif Classic · Mono Forward · Display Wide · Handwritten · Brutalist · Magazine · Y2K · Playful.
+
+Each step is skippable; Back navigates without losing state. Dashboard surfaces a "Quick start" card for users with zero blocks.
 
 ### Auto-generated OG images
 - `/api/og/[username]` runs on Node runtime via `next/og`; pulls avatar, display name, handle, bio, and brand palette into a themed 1200×630 share card
@@ -101,24 +117,17 @@ Target users, in order: Twitch streamers → YouTubers / video creators → musi
 
 ---
 
-## 🚧 Phase 1 — Widget polish (remaining)
+## 🚧 Phase 1 polish (remaining)
 
-The widget catalogue + auto-detect shipped. What's left in Phase 1 is making widgets feel alive at scale and filling in the few Tier-1 gaps.
-
-### Remaining Tier-1 widgets
-- **Twitch latest VOD** — Helix `/videos?user_id={id}&type=archive&first=1`
-- **YouTube live status** — distinct from latest-video; "live now" badge if `liveBroadcastContent === "live"`
-- **Generic OG card** — `<meta property="og:*">` scrape for any unrecognized URL (the "anything else" fallback in auto-detect)
+The widget catalogue + auto-detect + edit + tab-focus revalidation shipped. What's left makes live widgets feel alive at scale.
 
 ### Live-data freshness — phase 2
-What's done: per-kind `next: { revalidate }` cache windows. What's left:
-- **Client revalidation on tab focus**: lightweight client wrapper that calls a server action when the tab becomes visible after >30s
 - **Visible "updated 2 min ago" indicator** on live widgets so static-looking states don't feel broken
 - **Twitch EventSub**: subscribe to `stream.online` / `stream.offline` events for known streamers. Webhook updates a `creator_live_status` table; pages read from it. Removes polling cost at scale.
 - **Smart polling**: only revalidate for creators whose pages were viewed in the last 5 minutes
 - **Graceful degradation**: API down → show last known state with subtle "last seen" note. Never render a broken widget.
 
-### Tier 2 — still deferred to Phase 6 (needs OAuth or evolving APIs)
+### Tier 2 widgets — still deferred to Phase 6 (need OAuth or evolving APIs)
 - Spotify "now playing" (per-user OAuth + token refresh)
 - Steam profile (recently played, achievements)
 - Last.fm scrobbles
@@ -133,48 +142,18 @@ What's done: per-kind `next: { revalidate }` cache windows. What's left:
 
 ---
 
-## 🟡 Phase 2 — Onboarding that delivers the "easy" promise
+## 🟡 Phase 2 polish — Onboarding follow-ups
 
-The product fails if a non-tech-literate creator can't build a populated, branded page in under 90 seconds.
-
-### First-run flow
-1. Pick creator archetype (Streamer · YouTuber · Musician · Podcaster · Visual Artist · Game Dev · Other)
-2. Paste your platform URLs (one input per major platform — Twitch, YouTube, TikTok, Spotify, Discord, Patreon)
-3. App auto-creates widgets pre-populated from those URLs
-4. Pick a brand color → palette generated
-5. Pick a type pairing → typography set
-6. Land on dashboard with a populated page already shareable
-
-### Creator-archetype starting points
-6–8 starting points, each a fully laid-out canvas with the right widgets pre-placed and placeholder content matching the archetype's vibe.
-
-| Archetype | Default widgets | Default vibe |
-|---|---|---|
-| Streamer | Twitch live, latest VOD, Discord, schedule, tip jar | Energetic, dark, neon accents |
-| YouTuber | Latest video, channel stats, subscribe CTA, latest short | Clean, video-thumbnail-led |
-| Musician | Spotify embed, latest release, tour dates, YouTube music video | Editorial, image-led |
-| Podcaster | Latest episode embed, Apple/Spotify/Overcast links, RSS, Patreon | Type-led, minimal |
-| Visual Artist | Image grid, Instagram link, prints store link, commission CTA | Gallery, generous whitespace |
-| Game Dev | Latest devlog, GitHub repo, itch.io / Steam link, Discord | Tech, monospace accents |
-
-### Palette-from-seed
-Pick one brand color → app generates: text, muted, accent, hover, background gradient stops. User can override individual values; most won't.
-
-### Type pairings library
-12 curated pairings (Display + Heading + Body + UI + Mono). One click sets all five roles. Custom override available but hidden by default.
-
-Examples: Editorial · Brutalist · Soft · Tech · Magazine · Handwritten · Modernist · Y2K · Serif Classic · Display Wide · Mono Forward · Playful.
+The 4-step flow shipped, but a few quality-of-life items remain:
+- **Re-run protection** — flow currently appends widgets every time it runs (no `profiles.onboarded_at` flag). Add a flag + a "you've already done this" guard, or make step 2 dedupe against existing widgets.
+- **More than one font role** — current flow sets a single `theme.font`. The full typography subsystem (Phase 3) introduces 5 roles (display, heading, body, ui, mono); the pairing library will set all five once that lands.
+- **Skip-all confirmation** — if the user skips every step, the dashboard should still show something useful instead of an empty page.
 
 ---
 
 ## 🟠 Phase 3 — Make it look genuinely different
 
 Visual depth is the moat against Linktree and the parity feature against Bento. Pages on LinkFolio should be unmistakably *not templates*.
-
-### QOL carry-over from Phase 1
-- Edit widget metadata in place (currently delete-and-re-add)
-- Widget previews in the theme editor pane (preview shows widget shells but not real fetched data)
-- Optimistic UI returns resolved widget metadata so the dashboard list shows the right label immediately, not the raw input
 
 ### Typography subsystem (replaces flat font picker)
 
