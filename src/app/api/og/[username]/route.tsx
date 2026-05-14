@@ -129,7 +129,7 @@ export async function GET(
               fontFamily: "ui-monospace, monospace",
             }}
           >
-            @{profile.username}
+            {`@${profile.username}`}
           </div>
 
           {profile.bio && (
@@ -159,7 +159,7 @@ export async function GET(
           >
             <span>LinkFolio</span>
             <span style={{ color: theme.accent_color }}>•</span>
-            <span>{host}/{profile.username}</span>
+            <span>{`${host}/${profile.username}`}</span>
           </div>
         </div>
       ),
