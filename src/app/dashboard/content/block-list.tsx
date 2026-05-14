@@ -19,6 +19,8 @@ import {
   EyeOff,
   Radio,
   Sparkles,
+  Youtube,
+  Wand2,
 } from "lucide-react";
 import { createBlock, createWidgetBlock, updateBlock, deleteBlock, reorderBlocks, toggleBlockVisibility } from "./actions";
 import type { Block, BlockType } from "@/lib/blocks";
@@ -53,7 +55,7 @@ export function BlockList({ initial }: { initial: Block[] }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [adding, setAdding] = useState<BlockType | null>(null);
-  const [addingWidget, setAddingWidget] = useState<"twitch_live" | null>(null);
+  const [addingWidget, setAddingWidget] = useState<WidgetPickerKind | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -85,11 +87,11 @@ export function BlockList({ initial }: { initial: Block[] }) {
     });
   }
 
-  function handleAddWidget(kind: "twitch_live", formData: FormData) {
+  function handleAddWidget(kind: WidgetPickerKind, formData: FormData) {
     setError(null);
     const input = (formData.get("input") as string | null)?.trim() ?? "";
     if (!input) {
-      setError("Enter a channel name or URL");
+      setError("Enter a URL or handle");
       return;
     }
     startTransition(async () => {
@@ -98,14 +100,16 @@ export function BlockList({ initial }: { initial: Block[] }) {
         setError(result.error);
         return;
       }
+      // Server is the source of truth for resolved kind/meta — reload via revalidate.
+      // Use an optimistic placeholder so the row appears immediately.
       const newBlock: Block = {
         id: result.id ?? crypto.randomUUID(),
         type: "widget",
-        widget_kind: kind,
+        widget_kind: kind === "auto" ? null : kind,
         title: input,
         url: null,
         content: null,
-        meta: { channel: input },
+        meta: null,
       };
       setBlocks((prev) => [...prev, newBlock]);
       setAddingWidget(null);
@@ -269,11 +273,52 @@ export function BlockList({ initial }: { initial: Block[] }) {
   );
 }
 
+type WidgetPickerKind = "auto" | "twitch_live" | "youtube_channel" | "youtube_video";
+
+function widgetKindLabel(kind: Block["widget_kind"]): string {
+  switch (kind) {
+    case "twitch_live": return "Twitch live";
+    case "youtube_channel": return "YouTube channel";
+    case "youtube_video": return "YouTube video";
+    default: return "Widget";
+  }
+}
+
+function widgetSubtitle(block: Block): string {
+  const meta = (block.meta ?? {}) as { channel?: string; handle?: string; channel_id?: string; video_id?: string };
+  if (meta.channel) return meta.channel;
+  if (meta.handle) return `@${meta.handle}`;
+  if (meta.channel_id) return meta.channel_id;
+  if (meta.video_id) return `video ${meta.video_id}`;
+  return block.title ?? "";
+}
+
+const WIDGET_LABELS: Record<WidgetPickerKind, string> = {
+  auto: "Paste any URL",
+  twitch_live: "Twitch live status",
+  youtube_channel: "YouTube channel",
+  youtube_video: "YouTube latest video",
+};
+
+const WIDGET_PLACEHOLDERS: Record<WidgetPickerKind, string> = {
+  auto: "Paste a twitch.tv or youtube.com URL",
+  twitch_live: "shroud or https://twitch.tv/shroud",
+  youtube_channel: "@mkbhd or https://youtube.com/@mkbhd",
+  youtube_video: "https://youtube.com/watch?v=…  (or a channel URL for latest)",
+};
+
+const WIDGET_HINTS: Record<WidgetPickerKind, string> = {
+  auto: "We'll figure out which widget to add. Currently supports Twitch and YouTube URLs.",
+  twitch_live: "Shows a live indicator + viewer count when the channel is streaming.",
+  youtube_channel: "Shows subscriber count and links to the channel.",
+  youtube_video: "Embeds the most recent upload — or pin a specific video by pasting its URL.",
+};
+
 function WidgetPicker({
   onPick,
   onCancel,
 }: {
-  onPick: (kind: "twitch_live") => void;
+  onPick: (kind: WidgetPickerKind) => void;
   onCancel: () => void;
 }) {
   return (
@@ -289,15 +334,42 @@ function WidgetPicker({
           type="button"
           variant="outline"
           size="sm"
+          onClick={() => onPick("auto")}
+          className="justify-start sm:col-span-2"
+        >
+          <Wand2 className="h-4 w-4 mr-2" />
+          Paste a URL — auto-detect
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
           onClick={() => onPick("twitch_live")}
           className="justify-start"
         >
           <Radio className="h-4 w-4 mr-2" />
           Twitch live status
         </Button>
-        <div className="text-xs text-muted-foreground self-center px-2">
-          More widgets coming soon — YouTube, Spotify, GitHub…
-        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPick("youtube_channel")}
+          className="justify-start"
+        >
+          <Youtube className="h-4 w-4 mr-2" />
+          YouTube channel
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPick("youtube_video")}
+          className="justify-start"
+        >
+          <Youtube className="h-4 w-4 mr-2" />
+          YouTube latest video
+        </Button>
       </div>
     </div>
   );
@@ -309,31 +381,23 @@ function WidgetForm({
   onSubmit,
   onCancel,
 }: {
-  kind: "twitch_live";
+  kind: WidgetPickerKind;
   pending: boolean;
   onSubmit: (fd: FormData) => void;
   onCancel: () => void;
 }) {
-  const label = kind === "twitch_live" ? "Twitch live status" : kind;
   return (
     <form action={onSubmit} className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="font-medium text-sm">Add {label}</h3>
+        <h3 className="font-medium text-sm">Add {WIDGET_LABELS[kind]}</h3>
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
           Cancel
         </Button>
       </div>
       <div className="space-y-1">
-        <Label htmlFor="input">Twitch channel</Label>
-        <Input
-          id="input"
-          name="input"
-          placeholder="e.g. shroud or https://twitch.tv/shroud"
-          required
-        />
-        <p className="text-xs text-muted-foreground">
-          Shows a live indicator + viewer count when the channel is streaming.
-        </p>
+        <Label htmlFor="input">URL or handle</Label>
+        <Input id="input" name="input" placeholder={WIDGET_PLACEHOLDERS[kind]} required />
+        <p className="text-xs text-muted-foreground">{WIDGET_HINTS[kind]}</p>
       </div>
       <Button type="submit" disabled={pending}>
         {pending ? "Adding..." : "Add widget"}
@@ -487,11 +551,9 @@ function SortableBlockItem({
         )}
         {block.type === "widget" && (
           <>
-            <p className="font-medium truncate">
-              {block.widget_kind === "twitch_live" ? "Twitch live" : "Widget"}
-            </p>
+            <p className="font-medium truncate">{widgetKindLabel(block.widget_kind)}</p>
             <p className="text-sm text-muted-foreground truncate">
-              {(block.meta as { channel?: string } | null)?.channel ?? block.title ?? ""}
+              {widgetSubtitle(block)}
             </p>
           </>
         )}

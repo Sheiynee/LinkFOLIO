@@ -6,6 +6,8 @@ import { revalidatePath } from "next/cache";
 import { type BlockType, normalizeUrl } from "@/lib/blocks";
 import type { WidgetKind } from "@/lib/widgets/types";
 import { parseTwitchChannel } from "@/lib/widgets/twitch";
+import { parseYouTubeUrl } from "@/lib/widgets/youtube";
+import { detectWidgetFromUrl } from "@/lib/widgets/detect";
 
 async function revalidatePublicPage(userId: string) {
   const supabase = createAdminClient();
@@ -152,8 +154,64 @@ export async function deleteBlock(id: string) {
   return { ok: true };
 }
 
+type ResolveResult =
+  | { kind: WidgetKind; meta: Record<string, unknown>; title: string | null }
+  | { error: string };
+
+function resolveWidget(kind: WidgetKind | "auto", input: string): ResolveResult {
+  const trimmed = input.trim();
+  if (!trimmed) return { error: "Enter a URL or handle" };
+
+  if (kind === "auto") {
+    const detected = detectWidgetFromUrl(trimmed);
+    if (!detected) return { error: "Couldn't recognize that URL — pick a widget type below" };
+    return { kind: detected.kind, meta: detected.meta, title: detected.label };
+  }
+
+  if (kind === "twitch_live") {
+    const channel = parseTwitchChannel(trimmed) ?? trimmed.toLowerCase();
+    if (!/^[a-zA-Z0-9_]{3,25}$/.test(channel)) {
+      return { error: "Enter a Twitch channel name or twitch.tv URL" };
+    }
+    return { kind, meta: { channel }, title: channel };
+  }
+
+  if (kind === "youtube_channel") {
+    const yt = parseYouTubeUrl(trimmed);
+    if (yt?.kind === "youtube_channel") {
+      return {
+        kind,
+        meta: yt.channel_id ? { channel_id: yt.channel_id } : { handle: yt.handle },
+        title: yt.handle ? `@${yt.handle}` : "YouTube channel",
+      };
+    }
+    if (/^@?[a-zA-Z0-9._-]+$/.test(trimmed)) {
+      const handle = trimmed.replace(/^@/, "");
+      return { kind, meta: { handle }, title: `@${handle}` };
+    }
+    return { error: "Enter a YouTube channel URL or @handle" };
+  }
+
+  if (kind === "youtube_video") {
+    const yt = parseYouTubeUrl(trimmed);
+    if (yt?.kind === "youtube_video") {
+      return { kind, meta: { video_id: yt.video_id }, title: "YouTube video" };
+    }
+    if (yt?.kind === "youtube_channel") {
+      return {
+        kind,
+        meta: yt.channel_id ? { channel_id: yt.channel_id } : { handle: yt.handle },
+        title: "Latest from " + (yt.handle ? `@${yt.handle}` : "YouTube"),
+      };
+    }
+    return { error: "Enter a YouTube video URL or channel" };
+  }
+
+  return { error: "Widget kind not implemented yet" };
+}
+
 interface CreateWidgetInput {
-  kind: WidgetKind;
+  kind: WidgetKind | "auto";
   input: string;
 }
 
@@ -161,19 +219,9 @@ export async function createWidgetBlock({ kind, input }: CreateWidgetInput) {
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated" };
 
-  let meta: Record<string, unknown> | null = null;
-  let title: string | null = null;
-
-  if (kind === "twitch_live") {
-    const channel = parseTwitchChannel(input) ?? input.trim().toLowerCase();
-    if (!/^[a-zA-Z0-9_]{3,25}$/.test(channel)) {
-      return { error: "Enter a Twitch channel name or twitch.tv URL" };
-    }
-    meta = { channel };
-    title = channel;
-  } else {
-    return { error: "Widget kind not implemented yet" };
-  }
+  const resolved = resolveWidget(kind, input);
+  if ("error" in resolved) return resolved;
+  const { kind: finalKind, meta, title } = resolved;
 
   const supabase = createAdminClient();
   const { data: maxRow } = await supabase
@@ -190,7 +238,7 @@ export async function createWidgetBlock({ kind, input }: CreateWidgetInput) {
     .insert({
       user_id: session.user.id,
       type: "widget",
-      widget_kind: kind,
+      widget_kind: finalKind,
       position,
       title,
       meta,

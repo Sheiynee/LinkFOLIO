@@ -8,6 +8,8 @@ import {
 import type { Block } from "@/lib/blocks";
 import type { WidgetData } from "@/lib/widgets/types";
 import { TwitchLiveWidget } from "./widgets/twitch-live-widget";
+import { YouTubeChannelWidget } from "./widgets/youtube-channel-widget";
+import { YouTubeVideoWidget } from "./widgets/youtube-video-widget";
 
 export interface ProfileRenderData {
   username: string;
@@ -145,6 +147,42 @@ export function ProfileRender({
                       key={block.id}
                       channel={channel}
                       data={data}
+                      theme={theme}
+                      preview={preview}
+                    />
+                  );
+                }
+                if (block.widget_kind === "youtube_channel") {
+                  const meta = (block.meta ?? {}) as { channel_id?: string; handle?: string };
+                  const fallbackUrl = meta.handle
+                    ? `https://youtube.com/@${meta.handle}`
+                    : meta.channel_id
+                      ? `https://youtube.com/channel/${meta.channel_id}`
+                      : "https://youtube.com";
+                  const data = wd?.kind === "youtube_channel" ? wd.data : null;
+                  return (
+                    <YouTubeChannelWidget
+                      key={block.id}
+                      data={data}
+                      fallbackUrl={fallbackUrl}
+                      theme={theme}
+                      preview={preview}
+                    />
+                  );
+                }
+                if (block.widget_kind === "youtube_video") {
+                  const meta = (block.meta ?? {}) as { video_id?: string; channel_id?: string; handle?: string };
+                  const fallbackUrl = meta.video_id
+                    ? `https://youtube.com/watch?v=${meta.video_id}`
+                    : meta.handle
+                      ? `https://youtube.com/@${meta.handle}`
+                      : "https://youtube.com";
+                  const data = wd?.kind === "youtube_video" ? wd.data : null;
+                  return (
+                    <YouTubeVideoWidget
+                      key={block.id}
+                      data={data}
+                      fallbackUrl={fallbackUrl}
                       theme={theme}
                       preview={preview}
                     />

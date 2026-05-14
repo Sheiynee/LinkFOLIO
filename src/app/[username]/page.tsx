@@ -6,6 +6,7 @@ import { normalizeTheme } from "@/lib/themes";
 import type { Block } from "@/lib/blocks";
 import type { WidgetData } from "@/lib/widgets/types";
 import { getTwitchLiveStatus } from "@/lib/widgets/twitch";
+import { getYouTubeChannel, getYouTubeLatestVideo } from "@/lib/widgets/youtube";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +48,16 @@ async function loadWidgetData(blocks: Block[]): Promise<Record<string, WidgetDat
         if (!channel) return null;
         const data = await getTwitchLiveStatus(channel);
         return [block.id, { kind: "twitch_live", data }];
+      }
+      if (block.widget_kind === "youtube_channel") {
+        const meta = (block.meta ?? {}) as { channel_id?: string; handle?: string };
+        const data = await getYouTubeChannel(meta);
+        return [block.id, { kind: "youtube_channel", data }];
+      }
+      if (block.widget_kind === "youtube_video") {
+        const meta = (block.meta ?? {}) as { video_id?: string; channel_id?: string; handle?: string };
+        const data = await getYouTubeLatestVideo(meta);
+        return [block.id, { kind: "youtube_video", data }];
       }
       return null;
     })

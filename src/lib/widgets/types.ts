@@ -32,7 +32,43 @@ export interface TwitchLiveData {
   } | null;
 }
 
+export interface YouTubeChannelMeta {
+  channel_id?: string;
+  handle?: string;
+}
+
+export interface YouTubeChannelData {
+  channel: {
+    id: string;
+    title: string;
+    description: string;
+    custom_url: string | null;
+    thumbnail_url: string;
+    subscriber_count: number;
+    video_count: number;
+    view_count: number;
+  };
+}
+
+export interface YouTubeVideoMeta {
+  video_id?: string;
+  channel_id?: string;
+  handle?: string;
+}
+
+export interface YouTubeVideoData {
+  video: {
+    id: string;
+    title: string;
+    channel_title: string;
+    published_at: string;
+    thumbnail_url: string;
+    view_count: number | null;
+  };
+}
+
 export type WidgetData =
   | { kind: "twitch_live"; data: TwitchLiveData | null }
-  | { kind: "youtube_channel"; data: unknown }
+  | { kind: "youtube_channel"; data: YouTubeChannelData | null }
+  | { kind: "youtube_video"; data: YouTubeVideoData | null }
   | { kind: "unsupported"; data: null };
