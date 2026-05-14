@@ -14,7 +14,10 @@ import { GitHubRepoWidget } from "./widgets/github-repo-widget";
 import { GitHubUserWidget } from "./widgets/github-user-widget";
 import { DiscordInviteWidget } from "./widgets/discord-invite-widget";
 import { TipJarWidget } from "./widgets/tip-jar-widget";
+import { SpotifyEmbedWidget } from "./widgets/spotify-embed-widget";
+import { TikTokVideoWidget } from "./widgets/tiktok-video-widget";
 import type { TipPlatform } from "@/lib/widgets/types";
+import type { SpotifyEntityType } from "@/lib/widgets/spotify";
 
 export interface ProfileRenderData {
   username: string;
@@ -246,6 +249,32 @@ export function ProfileRender({
                       key={block.id}
                       platform={meta.platform}
                       handle={meta.handle}
+                      theme={theme}
+                      preview={preview}
+                    />
+                  );
+                }
+                if (block.widget_kind === "spotify_embed") {
+                  const meta = (block.meta ?? {}) as { type?: SpotifyEntityType; id?: string };
+                  if (!meta.type || !meta.id) return null;
+                  return (
+                    <SpotifyEmbedWidget
+                      key={block.id}
+                      type={meta.type}
+                      id={meta.id}
+                      theme={theme}
+                      preview={preview}
+                    />
+                  );
+                }
+                if (block.widget_kind === "tiktok_video") {
+                  const meta = (block.meta ?? {}) as { username?: string; video_id?: string };
+                  if (!meta.username || !meta.video_id) return null;
+                  return (
+                    <TikTokVideoWidget
+                      key={block.id}
+                      username={meta.username}
+                      videoId={meta.video_id}
                       theme={theme}
                       preview={preview}
                     />

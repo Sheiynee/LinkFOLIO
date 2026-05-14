@@ -24,6 +24,8 @@ import {
   Github,
   MessageCircle,
   Coffee,
+  Music,
+  Video,
 } from "lucide-react";
 import { createBlock, createWidgetBlock, updateBlock, deleteBlock, reorderBlocks, toggleBlockVisibility } from "./actions";
 import type { Block, BlockType } from "@/lib/blocks";
@@ -284,7 +286,9 @@ type WidgetPickerKind =
   | "github_repo"
   | "github_user"
   | "discord_invite"
-  | "tip_jar";
+  | "tip_jar"
+  | "spotify_embed"
+  | "tiktok_video";
 
 function widgetKindLabel(kind: Block["widget_kind"]): string {
   switch (kind) {
@@ -295,6 +299,8 @@ function widgetKindLabel(kind: Block["widget_kind"]): string {
     case "github_user": return "GitHub user";
     case "discord_invite": return "Discord invite";
     case "tip_jar": return "Tip jar";
+    case "spotify_embed": return "Spotify";
+    case "tiktok_video": return "TikTok";
     default: return "Widget";
   }
 }
@@ -310,7 +316,10 @@ function widgetSubtitle(block: Block): string {
     username?: string;
     invite_code?: string;
     platform?: string;
+    type?: string;
+    id?: string;
   };
+  if (meta.type && meta.id) return `${meta.type}/${meta.id.slice(0, 8)}…`;
   if (meta.owner && meta.repo) return `${meta.owner}/${meta.repo}`;
   if (meta.username) return `@${meta.username}`;
   if (meta.invite_code) return `discord.gg/${meta.invite_code}`;
@@ -331,6 +340,8 @@ const WIDGET_LABELS: Record<WidgetPickerKind, string> = {
   github_user: "GitHub user",
   discord_invite: "Discord invite",
   tip_jar: "Tip jar",
+  spotify_embed: "Spotify embed",
+  tiktok_video: "TikTok video",
 };
 
 const WIDGET_PLACEHOLDERS: Record<WidgetPickerKind, string> = {
@@ -342,6 +353,8 @@ const WIDGET_PLACEHOLDERS: Record<WidgetPickerKind, string> = {
   github_user: "@torvalds or https://github.com/torvalds",
   discord_invite: "https://discord.gg/xxxx or just the code",
   tip_jar: "https://ko-fi.com/yourname (or BMaC, Patreon, Streamlabs)",
+  spotify_embed: "https://open.spotify.com/track/… (or album, artist, playlist)",
+  tiktok_video: "https://tiktok.com/@user/video/…",
 };
 
 const WIDGET_HINTS: Record<WidgetPickerKind, string> = {
@@ -353,6 +366,8 @@ const WIDGET_HINTS: Record<WidgetPickerKind, string> = {
   github_user: "Shows followers + public repo count.",
   discord_invite: "Shows server name, member count, and online count. Auto-refreshes.",
   tip_jar: "Branded button to your tip platform. Detects Ko-fi, BMaC, Patreon, Streamlabs.",
+  spotify_embed: "Real Spotify player. Supports track, album, artist, playlist, episode, show.",
+  tiktok_video: "Branded card linking to the TikTok video.",
 };
 
 function WidgetPicker({
@@ -450,6 +465,26 @@ function WidgetPicker({
         >
           <Coffee className="h-4 w-4 mr-2" />
           Tip jar
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPick("spotify_embed")}
+          className="justify-start"
+        >
+          <Music className="h-4 w-4 mr-2" />
+          Spotify
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPick("tiktok_video")}
+          className="justify-start"
+        >
+          <Video className="h-4 w-4 mr-2" />
+          TikTok video
         </Button>
       </div>
     </div>

@@ -109,4 +109,6 @@ export type WidgetData =
   | { kind: "github_user"; data: GitHubUserData | null }
   | { kind: "discord_invite"; data: DiscordInviteData | null }
   | { kind: "tip_jar"; data: null }
+  | { kind: "spotify_embed"; data: null }
+  | { kind: "tiktok_video"; data: null }
   | { kind: "unsupported"; data: null };

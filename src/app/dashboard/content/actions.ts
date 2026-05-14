@@ -10,6 +10,8 @@ import { parseYouTubeUrl } from "@/lib/widgets/youtube";
 import { parseGitHubUrl } from "@/lib/widgets/github";
 import { parseDiscordInvite } from "@/lib/widgets/discord";
 import { parseTipJarUrl, TIP_PLATFORMS } from "@/lib/widgets/tip-jar";
+import { parseSpotifyUrl } from "@/lib/widgets/spotify";
+import { parseTikTokUrl } from "@/lib/widgets/tiktok";
 import { detectWidgetFromUrl } from "@/lib/widgets/detect";
 
 async function revalidatePublicPage(userId: string) {
@@ -236,6 +238,24 @@ function resolveWidget(kind: WidgetKind | "auto", input: string): ResolveResult 
     const code = parseDiscordInvite(trimmed);
     if (code) return { kind, meta: { invite_code: code }, title: "Discord server" };
     return { error: "Enter a discord.gg invite link or code" };
+  }
+
+  if (kind === "spotify_embed") {
+    const sp = parseSpotifyUrl(trimmed);
+    if (sp) return { kind, meta: { type: sp.type, id: sp.id }, title: `Spotify ${sp.type}` };
+    return { error: "Paste a Spotify track, album, artist, or playlist URL" };
+  }
+
+  if (kind === "tiktok_video") {
+    const tt = parseTikTokUrl(trimmed);
+    if (tt) {
+      return {
+        kind,
+        meta: { username: tt.username, video_id: tt.video_id },
+        title: `TikTok @${tt.username}`,
+      };
+    }
+    return { error: "Paste a TikTok video URL (tiktok.com/@user/video/…)" };
   }
 
   if (kind === "tip_jar") {

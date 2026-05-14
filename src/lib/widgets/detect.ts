@@ -4,6 +4,8 @@ import { parseYouTubeUrl } from "./youtube";
 import { parseGitHubUrl } from "./github";
 import { parseDiscordInvite } from "./discord";
 import { parseTipJarUrl } from "./tip-jar";
+import { parseSpotifyUrl } from "./spotify";
+import { parseTikTokUrl } from "./tiktok";
 
 export interface DetectedWidget {
   kind: WidgetKind;
@@ -21,6 +23,24 @@ export function detectWidgetFromUrl(input: string): DetectedWidget | null {
       kind: "twitch_live",
       meta: { channel: twitchChannel },
       label: `Twitch live status — ${twitchChannel}`,
+    };
+  }
+
+  const sp = parseSpotifyUrl(raw);
+  if (sp) {
+    return {
+      kind: "spotify_embed",
+      meta: { type: sp.type, id: sp.id },
+      label: `Spotify ${sp.type}`,
+    };
+  }
+
+  const tt = parseTikTokUrl(raw);
+  if (tt) {
+    return {
+      kind: "tiktok_video",
+      meta: { username: tt.username, video_id: tt.video_id },
+      label: `TikTok video by @${tt.username}`,
     };
   }
 

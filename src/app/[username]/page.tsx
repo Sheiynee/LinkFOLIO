@@ -80,8 +80,13 @@ async function loadWidgetData(blocks: Block[]): Promise<Record<string, WidgetDat
         return [block.id, { kind: "discord_invite", data }];
       }
       if (block.widget_kind === "tip_jar") {
-        // No data fetch — pure deep link with platform branding
         return [block.id, { kind: "tip_jar", data: null }];
+      }
+      if (block.widget_kind === "spotify_embed") {
+        return [block.id, { kind: "spotify_embed", data: null }];
+      }
+      if (block.widget_kind === "tiktok_video") {
+        return [block.id, { kind: "tiktok_video", data: null }];
       }
       return null;
     })
