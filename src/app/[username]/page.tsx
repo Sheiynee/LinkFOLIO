@@ -5,10 +5,11 @@ import { ProfileRender, type ProfileRenderData } from "@/components/profile-rend
 import { normalizeTheme } from "@/lib/themes";
 import type { Block } from "@/lib/blocks";
 import type { WidgetData } from "@/lib/widgets/types";
-import { getTwitchLiveStatus } from "@/lib/widgets/twitch";
-import { getYouTubeChannel, getYouTubeLatestVideo } from "@/lib/widgets/youtube";
+import { getTwitchLiveStatus, getTwitchLatestVod } from "@/lib/widgets/twitch";
+import { getYouTubeChannel, getYouTubeLatestVideo, getYouTubeLiveStatus } from "@/lib/widgets/youtube";
 import { getGitHubRepo, getGitHubUser } from "@/lib/widgets/github";
 import { getDiscordInvite } from "@/lib/widgets/discord";
+import { fetchOgCard } from "@/lib/widgets/og-scraper";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +51,23 @@ async function loadWidgetData(blocks: Block[]): Promise<Record<string, WidgetDat
         if (!channel) return null;
         const data = await getTwitchLiveStatus(channel);
         return [block.id, { kind: "twitch_live", data }];
+      }
+      if (block.widget_kind === "twitch_vod") {
+        const channel = (block.meta as { channel?: string } | null)?.channel;
+        if (!channel) return null;
+        const data = await getTwitchLatestVod(channel);
+        return [block.id, { kind: "twitch_vod", data }];
+      }
+      if (block.widget_kind === "youtube_live") {
+        const meta = (block.meta ?? {}) as { channel_id?: string; handle?: string };
+        const data = await getYouTubeLiveStatus(meta);
+        return [block.id, { kind: "youtube_live", data }];
+      }
+      if (block.widget_kind === "og_card") {
+        const url = (block.meta as { url?: string } | null)?.url;
+        if (!url) return null;
+        const data = await fetchOgCard(url);
+        return [block.id, { kind: "og_card", data }];
       }
       if (block.widget_kind === "youtube_channel") {
         const meta = (block.meta ?? {}) as { channel_id?: string; handle?: string };

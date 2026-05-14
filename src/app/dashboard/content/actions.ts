@@ -12,6 +12,7 @@ import { parseDiscordInvite } from "@/lib/widgets/discord";
 import { parseTipJarUrl, TIP_PLATFORMS } from "@/lib/widgets/tip-jar";
 import { parseSpotifyUrl } from "@/lib/widgets/spotify";
 import { parseTikTokUrl } from "@/lib/widgets/tiktok";
+import { isProbablyValidUrl } from "@/lib/widgets/og-scraper";
 import { detectWidgetFromUrl } from "@/lib/widgets/detect";
 
 async function revalidatePublicPage(userId: string) {
@@ -173,7 +174,7 @@ function resolveWidget(kind: WidgetKind | "auto", input: string): ResolveResult 
     return { kind: detected.kind, meta: detected.meta, title: detected.label };
   }
 
-  if (kind === "twitch_live") {
+  if (kind === "twitch_live" || kind === "twitch_vod") {
     const channel = parseTwitchChannel(trimmed) ?? trimmed.toLowerCase();
     if (!/^[a-zA-Z0-9_]{3,25}$/.test(channel)) {
       return { error: "Enter a Twitch channel name or twitch.tv URL" };
@@ -181,7 +182,7 @@ function resolveWidget(kind: WidgetKind | "auto", input: string): ResolveResult 
     return { kind, meta: { channel }, title: channel };
   }
 
-  if (kind === "youtube_channel") {
+  if (kind === "youtube_channel" || kind === "youtube_live") {
     const yt = parseYouTubeUrl(trimmed);
     if (yt?.kind === "youtube_channel") {
       return {
@@ -256,6 +257,13 @@ function resolveWidget(kind: WidgetKind | "auto", input: string): ResolveResult 
       };
     }
     return { error: "Paste a TikTok video URL (tiktok.com/@user/video/…)" };
+  }
+
+  if (kind === "og_card") {
+    if (!isProbablyValidUrl(trimmed)) {
+      return { error: "Paste a valid http(s) URL" };
+    }
+    return { kind, meta: { url: trimmed }, title: trimmed };
   }
 
   if (kind === "tip_jar") {

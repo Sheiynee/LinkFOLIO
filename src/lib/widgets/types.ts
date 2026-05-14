@@ -16,6 +16,32 @@ export interface TwitchLiveMeta {
   channel: string;
 }
 
+export interface TwitchVodData {
+  user: { display_name: string; profile_image_url: string };
+  video: {
+    id: string;
+    title: string;
+    url: string;
+    thumbnail_url: string;
+    duration: string;
+    published_at: string;
+    view_count: number;
+  } | null;
+}
+
+export interface YouTubeLiveData {
+  channel: { id: string; title: string; thumbnail_url: string; custom_url: string | null };
+  live: { video_id: string; title: string; thumbnail_url: string } | null;
+}
+
+export interface OgCardData {
+  title: string | null;
+  description: string | null;
+  image_url: string | null;
+  site_name: string | null;
+  url: string;
+}
+
 export interface TwitchLiveData {
   user: {
     id: string;
@@ -103,8 +129,11 @@ export interface TipJarMeta {
 
 export type WidgetData =
   | { kind: "twitch_live"; data: TwitchLiveData | null }
+  | { kind: "twitch_vod"; data: TwitchVodData | null }
   | { kind: "youtube_channel"; data: YouTubeChannelData | null }
   | { kind: "youtube_video"; data: YouTubeVideoData | null }
+  | { kind: "youtube_live"; data: YouTubeLiveData | null }
+  | { kind: "og_card"; data: OgCardData | null }
   | { kind: "github_repo"; data: GitHubRepoData | null }
   | { kind: "github_user"; data: GitHubUserData | null }
   | { kind: "discord_invite"; data: DiscordInviteData | null }

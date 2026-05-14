@@ -8,8 +8,11 @@ import {
 import type { Block } from "@/lib/blocks";
 import type { WidgetData } from "@/lib/widgets/types";
 import { TwitchLiveWidget } from "./widgets/twitch-live-widget";
+import { TwitchVodWidget } from "./widgets/twitch-vod-widget";
 import { YouTubeChannelWidget } from "./widgets/youtube-channel-widget";
 import { YouTubeVideoWidget } from "./widgets/youtube-video-widget";
+import { YouTubeLiveWidget } from "./widgets/youtube-live-widget";
+import { OgCardWidget } from "./widgets/og-card-widget";
 import { GitHubRepoWidget } from "./widgets/github-repo-widget";
 import { GitHubUserWidget } from "./widgets/github-user-widget";
 import { DiscordInviteWidget } from "./widgets/discord-invite-widget";
@@ -155,6 +158,51 @@ export function ProfileRender({
                       key={block.id}
                       channel={channel}
                       data={data}
+                      theme={theme}
+                      preview={preview}
+                    />
+                  );
+                }
+                if (block.widget_kind === "twitch_vod") {
+                  const channel = (block.meta as { channel?: string } | null)?.channel ?? block.title ?? "";
+                  const data = wd?.kind === "twitch_vod" ? wd.data : null;
+                  return (
+                    <TwitchVodWidget
+                      key={block.id}
+                      channel={channel}
+                      data={data}
+                      theme={theme}
+                      preview={preview}
+                    />
+                  );
+                }
+                if (block.widget_kind === "youtube_live") {
+                  const meta = (block.meta ?? {}) as { channel_id?: string; handle?: string };
+                  const fallbackUrl = meta.handle
+                    ? `https://youtube.com/@${meta.handle}`
+                    : meta.channel_id
+                      ? `https://youtube.com/channel/${meta.channel_id}`
+                      : "https://youtube.com";
+                  const data = wd?.kind === "youtube_live" ? wd.data : null;
+                  return (
+                    <YouTubeLiveWidget
+                      key={block.id}
+                      data={data}
+                      fallbackUrl={fallbackUrl}
+                      theme={theme}
+                      preview={preview}
+                    />
+                  );
+                }
+                if (block.widget_kind === "og_card") {
+                  const meta = (block.meta ?? {}) as { url?: string };
+                  const fallbackUrl = meta.url ?? "#";
+                  const data = wd?.kind === "og_card" ? wd.data : null;
+                  return (
+                    <OgCardWidget
+                      key={block.id}
+                      data={data}
+                      fallbackUrl={fallbackUrl}
                       theme={theme}
                       preview={preview}
                     />

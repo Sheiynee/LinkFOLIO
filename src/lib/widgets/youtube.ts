@@ -1,5 +1,5 @@
 import "server-only";
-import type { YouTubeChannelData, YouTubeVideoData } from "./types";
+import type { YouTubeChannelData, YouTubeVideoData, YouTubeLiveData } from "./types";
 
 const BASE = "https://www.googleapis.com/youtube/v3";
 
@@ -60,6 +60,7 @@ interface VideosResponse {
       title: string;
       channelTitle: string;
       publishedAt: string;
+      liveBroadcastContent?: "live" | "upcoming" | "none";
       thumbnails: { default?: { url: string }; medium?: { url: string }; high?: { url: string } };
     };
     statistics: { viewCount?: string };
@@ -135,6 +136,51 @@ export async function getYouTubeLatestVideo(
       thumbnail_url: resolveThumb(item.snippet.thumbnails),
       view_count: item.statistics.viewCount ? Number(item.statistics.viewCount) : null,
     },
+  };
+}
+
+export async function getYouTubeLiveStatus(
+  meta: { channel_id?: string; handle?: string }
+): Promise<YouTubeLiveData | null> {
+  const channelItem = await lookupChannel(meta);
+  if (!channelItem) return null;
+
+  const uploads = channelItem.contentDetails.relatedPlaylists.uploads;
+  // Fetch a few recent items — live broadcasts may not always be the very first.
+  const playlist = await ytFetch<PlaylistItemsResponse>(
+    "/playlistItems",
+    { part: "snippet", playlistId: uploads, maxResults: "5" },
+    60 // 1-minute revalidate so "going live" surfaces quickly
+  );
+  const candidateIds = (playlist?.items ?? [])
+    .map((i) => i.snippet.resourceId.videoId)
+    .filter(Boolean);
+
+  let liveVideo: YouTubeLiveData["live"] = null;
+  if (candidateIds.length > 0) {
+    const videos = await ytFetch<VideosResponse>(
+      "/videos",
+      { part: "snippet", id: candidateIds.join(",") },
+      60
+    );
+    const liveItem = videos?.items?.find((v) => v.snippet.liveBroadcastContent === "live");
+    if (liveItem) {
+      liveVideo = {
+        video_id: liveItem.id,
+        title: liveItem.snippet.title,
+        thumbnail_url: resolveThumb(liveItem.snippet.thumbnails),
+      };
+    }
+  }
+
+  return {
+    channel: {
+      id: channelItem.id,
+      title: channelItem.snippet.title,
+      thumbnail_url: resolveThumb(channelItem.snippet.thumbnails),
+      custom_url: channelItem.snippet.customUrl ?? null,
+    },
+    live: liveVideo,
   };
 }
 

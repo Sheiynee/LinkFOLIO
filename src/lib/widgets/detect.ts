@@ -6,6 +6,7 @@ import { parseDiscordInvite } from "./discord";
 import { parseTipJarUrl } from "./tip-jar";
 import { parseSpotifyUrl } from "./spotify";
 import { parseTikTokUrl } from "./tiktok";
+import { isProbablyValidUrl } from "./og-scraper";
 
 export interface DetectedWidget {
   kind: WidgetKind;
@@ -95,6 +96,15 @@ export function detectWidgetFromUrl(input: string): DetectedWidget | null {
       label: yt.handle
         ? `YouTube channel — @${yt.handle}`
         : "YouTube channel",
+    };
+  }
+
+  // Final fallback: any valid http(s) URL becomes a generic OG card.
+  if (isProbablyValidUrl(raw)) {
+    return {
+      kind: "og_card",
+      meta: { url: raw },
+      label: "Link card",
     };
   }
 

@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { TwitchLiveData } from "./types";
+import type { TwitchLiveData, TwitchVodData } from "./types";
 
 const TOKEN_URL = "https://id.twitch.tv/oauth2/token";
 const HELIX = "https://api.twitch.tv/helix";
@@ -123,6 +123,49 @@ export async function getTwitchLiveStatus(channel: string): Promise<TwitchLiveDa
           viewer_count: stream.viewer_count,
           started_at: stream.started_at,
           thumbnail_url: stream.thumbnail_url,
+        }
+      : null,
+  };
+}
+
+interface HelixVideosResponse {
+  data: Array<{
+    id: string;
+    title: string;
+    url: string;
+    thumbnail_url: string;
+    duration: string;
+    published_at: string;
+    view_count: number;
+  }>;
+}
+
+export async function getTwitchLatestVod(channel: string): Promise<TwitchVodData | null> {
+  const login = channel.trim().toLowerCase();
+  if (!login) return null;
+
+  const usersRes = await helix<HelixUsersResponse>("/users", { login }, 60 * 60);
+  const user = usersRes?.data?.[0];
+  if (!user) return null;
+
+  const videosRes = await helix<HelixVideosResponse>(
+    "/videos",
+    { user_id: user.id, type: "archive", first: "1" },
+    60 * 5
+  );
+  const vod = videosRes?.data?.[0] ?? null;
+
+  return {
+    user: { display_name: user.display_name, profile_image_url: user.profile_image_url },
+    video: vod
+      ? {
+          id: vod.id,
+          title: vod.title,
+          url: vod.url,
+          thumbnail_url: vod.thumbnail_url.replace("%{width}", "640").replace("%{height}", "360"),
+          duration: vod.duration,
+          published_at: vod.published_at,
+          view_count: vod.view_count,
         }
       : null,
   };

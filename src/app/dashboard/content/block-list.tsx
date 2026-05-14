@@ -26,6 +26,8 @@ import {
   Coffee,
   Music,
   Video,
+  Link as LinkIcon,
+  PlaySquare,
 } from "lucide-react";
 import { createBlock, createWidgetBlock, updateBlock, deleteBlock, reorderBlocks, toggleBlockVisibility } from "./actions";
 import type { Block, BlockType } from "@/lib/blocks";
@@ -288,7 +290,10 @@ type WidgetPickerKind =
   | "discord_invite"
   | "tip_jar"
   | "spotify_embed"
-  | "tiktok_video";
+  | "tiktok_video"
+  | "twitch_vod"
+  | "youtube_live"
+  | "og_card";
 
 function widgetKindLabel(kind: Block["widget_kind"]): string {
   switch (kind) {
@@ -301,6 +306,9 @@ function widgetKindLabel(kind: Block["widget_kind"]): string {
     case "tip_jar": return "Tip jar";
     case "spotify_embed": return "Spotify";
     case "tiktok_video": return "TikTok";
+    case "twitch_vod": return "Twitch VOD";
+    case "youtube_live": return "YouTube live";
+    case "og_card": return "Link card";
     default: return "Widget";
   }
 }
@@ -318,7 +326,9 @@ function widgetSubtitle(block: Block): string {
     platform?: string;
     type?: string;
     id?: string;
+    url?: string;
   };
+  if (meta.url) return meta.url;
   if (meta.type && meta.id) return `${meta.type}/${meta.id.slice(0, 8)}…`;
   if (meta.owner && meta.repo) return `${meta.owner}/${meta.repo}`;
   if (meta.username) return `@${meta.username}`;
@@ -342,6 +352,9 @@ const WIDGET_LABELS: Record<WidgetPickerKind, string> = {
   tip_jar: "Tip jar",
   spotify_embed: "Spotify embed",
   tiktok_video: "TikTok video",
+  twitch_vod: "Twitch latest VOD",
+  youtube_live: "YouTube live status",
+  og_card: "Generic link card",
 };
 
 const WIDGET_PLACEHOLDERS: Record<WidgetPickerKind, string> = {
@@ -355,6 +368,9 @@ const WIDGET_PLACEHOLDERS: Record<WidgetPickerKind, string> = {
   tip_jar: "https://ko-fi.com/yourname (or BMaC, Patreon, Streamlabs)",
   spotify_embed: "https://open.spotify.com/track/… (or album, artist, playlist)",
   tiktok_video: "https://tiktok.com/@user/video/…",
+  twitch_vod: "shroud or https://twitch.tv/shroud",
+  youtube_live: "@mkbhd or https://youtube.com/@mkbhd",
+  og_card: "Any https:// URL",
 };
 
 const WIDGET_HINTS: Record<WidgetPickerKind, string> = {
@@ -368,6 +384,9 @@ const WIDGET_HINTS: Record<WidgetPickerKind, string> = {
   tip_jar: "Branded button to your tip platform. Detects Ko-fi, BMaC, Patreon, Streamlabs.",
   spotify_embed: "Real Spotify player. Supports track, album, artist, playlist, episode, show.",
   tiktok_video: "Branded card linking to the TikTok video.",
+  twitch_vod: "Latest archived broadcast — thumbnail, title, view count. 5-min refresh.",
+  youtube_live: "Shows a pulsing LIVE badge when the channel is broadcasting. 1-min refresh.",
+  og_card: "Fetches the page's OG metadata (title, description, image) for any URL.",
 };
 
 function WidgetPicker({
@@ -485,6 +504,36 @@ function WidgetPicker({
         >
           <Video className="h-4 w-4 mr-2" />
           TikTok video
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPick("twitch_vod")}
+          className="justify-start"
+        >
+          <PlaySquare className="h-4 w-4 mr-2" />
+          Twitch latest VOD
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPick("youtube_live")}
+          className="justify-start"
+        >
+          <Radio className="h-4 w-4 mr-2" />
+          YouTube live status
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPick("og_card")}
+          className="justify-start"
+        >
+          <LinkIcon className="h-4 w-4 mr-2" />
+          Generic link card
         </Button>
       </div>
     </div>
