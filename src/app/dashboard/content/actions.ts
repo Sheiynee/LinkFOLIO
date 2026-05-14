@@ -286,6 +286,35 @@ interface CreateWidgetInput {
   input: string;
 }
 
+export async function updateWidgetBlock({ id, input }: { id: string; input: string }) {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Not authenticated" };
+
+  const supabase = createAdminClient();
+  const { data: existing } = await supabase
+    .from("blocks")
+    .select("id, widget_kind")
+    .eq("id", id)
+    .eq("user_id", session.user.id)
+    .single();
+  if (!existing || !existing.widget_kind) return { error: "Not found" };
+
+  const resolved = resolveWidget(existing.widget_kind as WidgetKind, input);
+  if ("error" in resolved) return resolved;
+
+  const { error } = await supabase
+    .from("blocks")
+    .update({ meta: resolved.meta, title: resolved.title })
+    .eq("id", id)
+    .eq("user_id", session.user.id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/dashboard/content");
+  revalidatePath("/dashboard");
+  await revalidatePublicPage(session.user.id);
+  return { ok: true, meta: resolved.meta, title: resolved.title };
+}
+
 export async function createWidgetBlock({ kind, input }: CreateWidgetInput) {
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated" };

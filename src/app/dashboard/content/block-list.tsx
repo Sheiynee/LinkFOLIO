@@ -29,7 +29,7 @@ import {
   Link as LinkIcon,
   PlaySquare,
 } from "lucide-react";
-import { createBlock, createWidgetBlock, updateBlock, deleteBlock, reorderBlocks, toggleBlockVisibility } from "./actions";
+import { createBlock, createWidgetBlock, updateWidgetBlock, updateBlock, deleteBlock, reorderBlocks, toggleBlockVisibility } from "./actions";
 import type { Block, BlockType } from "@/lib/blocks";
 import { BLOCK_LABELS } from "@/lib/blocks";
 import {
@@ -103,7 +103,7 @@ export function BlockList({ initial }: { initial: Block[] }) {
     }
     startTransition(async () => {
       const result = await createWidgetBlock({ kind, input });
-      if (result.error) {
+      if ("error" in result && result.error) {
         setError(result.error);
         return;
       }
@@ -126,6 +126,31 @@ export function BlockList({ initial }: { initial: Block[] }) {
 
   function handleUpdate(block: Block, formData: FormData) {
     setError(null);
+
+    if (block.type === "widget") {
+      const widgetInput = (formData.get("input") as string | null)?.trim() ?? "";
+      if (!widgetInput) {
+        setError("Enter a URL or handle");
+        return;
+      }
+      startTransition(async () => {
+        const result = await updateWidgetBlock({ id: block.id, input: widgetInput });
+        if ("error" in result) {
+          setError(result.error);
+          return;
+        }
+        setBlocks((prev) =>
+          prev.map((b) =>
+            b.id === block.id
+              ? { ...b, meta: result.meta ?? b.meta, title: result.title ?? b.title }
+              : b
+          )
+        );
+        setEditingId(null);
+      });
+      return;
+    }
+
     const input = {
       id: block.id,
       title: formData.get("title") as string | undefined,
@@ -652,6 +677,10 @@ function SortableBlockItem({
   const Icon = TYPE_ICONS[block.type];
 
   if (editing && block.type !== "divider") {
+    const widgetCurrent =
+      block.type === "widget"
+        ? widgetSubtitle(block)
+        : "";
     return (
       <li ref={setNodeRef} style={style} className="rounded-lg border p-3">
         <form action={onSubmit} className="space-y-2">
@@ -666,6 +695,19 @@ function SortableBlockItem({
           )}
           {block.type === "text" && (
             <Textarea name="content" defaultValue={block.content ?? ""} required rows={3} maxLength={500} />
+          )}
+          {block.type === "widget" && (
+            <>
+              <Input
+                name="input"
+                defaultValue={widgetCurrent}
+                required
+                placeholder="URL or handle for this widget"
+              />
+              <p className="text-xs text-muted-foreground">
+                Replacing the source for this {widgetKindLabel(block.widget_kind).toLowerCase()}.
+              </p>
+            </>
           )}
           <div className="flex gap-2 justify-end">
             <Button type="button" size="sm" variant="ghost" onClick={onCancelEdit}>
@@ -732,7 +774,7 @@ function SortableBlockItem({
       >
         {isHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
       </Button>
-      {block.type !== "divider" && block.type !== "widget" && (
+      {block.type !== "divider" && (
         <Button size="icon" variant="ghost" onClick={onStartEdit} aria-label="Edit">
           <Pencil className="h-4 w-4" />
         </Button>
