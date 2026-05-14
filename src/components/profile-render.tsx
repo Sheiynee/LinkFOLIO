@@ -198,7 +198,15 @@ export function ProfileRender({
       </div>
 
       <p className="mt-12 text-xs" style={{ color: theme.muted_color }}>
-        Powered by <span style={{ color: theme.accent_color }}>LinkFolio</span>
+        Powered by{" "}
+        <a
+          href={preview ? "#" : "/"}
+          onClick={preview ? (e) => e.preventDefault() : undefined}
+          className="hover:underline font-medium"
+          style={{ color: theme.accent_color }}
+        >
+          LinkFolio
+        </a>
       </p>
     </div>
   );
