@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ProfileRender, type ProfileRenderData } from "@/components/profile-render";
+import { RevalidateOnFocus } from "@/components/revalidate-on-focus";
 import { normalizeTheme } from "@/lib/themes";
 import type { Block } from "@/lib/blocks";
 import type { WidgetData } from "@/lib/widgets/types";
@@ -167,9 +168,14 @@ export default async function PublicProfilePage({ params }: Props) {
     blocks: profile.blocks,
   };
 
+  const hasLiveWidget = profile.blocks.some(
+    (b) => b.widget_kind === "twitch_live" || b.widget_kind === "youtube_live"
+  );
+
   return (
     <main className="min-h-screen">
       <ProfileRender profile={data} theme={theme} widgetData={widgetData} />
+      {hasLiveWidget && <RevalidateOnFocus />}
     </main>
   );
 }
