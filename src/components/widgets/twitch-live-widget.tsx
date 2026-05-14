@@ -1,4 +1,4 @@
-import type { TwitchLiveData } from "@/lib/widgets/types";
+import type { TwitchLiveData, WidgetSize } from "@/lib/widgets/types";
 import type { Theme } from "@/lib/themes";
 import { UpdatedAgo } from "./updated-ago";
 
@@ -6,17 +6,54 @@ export function TwitchLiveWidget({
   channel,
   data,
   theme,
+  size = "default",
   preview = false,
 }: {
   channel: string;
   data: TwitchLiveData | null;
   theme: Theme;
+  size?: WidgetSize;
   preview?: boolean;
 }) {
   const live = data?.stream;
   const user = data?.user;
 
   const href = preview ? "#" : `https://twitch.tv/${channel}`;
+
+  if (size === "compact") {
+    return (
+      <a
+        href={href}
+        target={preview ? undefined : "_blank"}
+        rel={preview ? undefined : "noopener noreferrer"}
+        onClick={preview ? (e) => e.preventDefault() : undefined}
+        className="flex items-center gap-2 w-full rounded-xl border px-3 py-2 transition hover:opacity-95"
+        style={{
+          backgroundColor: theme.button_bg,
+          color: theme.button_text,
+          borderColor: theme.button_border,
+        }}
+      >
+        {live && <LivePulse color="#ef4444" />}
+        <span className="font-medium truncate flex-1">
+          {user?.display_name ?? channel}
+        </span>
+        {live && (
+          <span className="text-xs shrink-0" style={{ color: theme.muted_color }}>
+            {formatViewers(live.viewer_count)}
+          </span>
+        )}
+        <span className="text-[10px] uppercase tracking-wide shrink-0" style={{ color: theme.muted_color }}>
+          twitch
+        </span>
+      </a>
+    );
+  }
+
+  const isFeatured = size === "featured";
+  const liveThumb = live?.thumbnail_url
+    ? live.thumbnail_url.replace("{width}", "1280").replace("{height}", "720")
+    : null;
 
   return (
     <a
@@ -31,24 +68,32 @@ export function TwitchLiveWidget({
         borderColor: theme.button_border,
       }}
     >
+      {isFeatured && live && liveThumb && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={liveThumb}
+          alt={live.title}
+          className="w-full aspect-video object-cover"
+        />
+      )}
       <div className="flex items-center gap-3 p-3">
         {user?.profile_image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={user.profile_image_url}
             alt={user.display_name}
-            className="h-12 w-12 rounded-full object-cover shrink-0"
+            className={`${isFeatured ? "h-16 w-16" : "h-12 w-12"} rounded-full object-cover shrink-0`}
           />
         ) : (
           <div
-            className="h-12 w-12 rounded-full shrink-0"
+            className={`${isFeatured ? "h-16 w-16" : "h-12 w-12"} rounded-full shrink-0`}
             style={{ backgroundColor: theme.muted_color, opacity: 0.3 }}
           />
         )}
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            <span className="font-semibold truncate">
+            <span className={`${isFeatured ? "text-lg" : ""} font-semibold truncate`}>
               {user?.display_name ?? channel}
             </span>
             <span className="text-xs px-1.5 py-0.5 rounded font-mono shrink-0" style={{ backgroundColor: theme.button_bg, color: theme.muted_color, border: `1px solid ${theme.button_border}` }}>
@@ -67,7 +112,7 @@ export function TwitchLiveWidget({
                   · {formatViewers(live.viewer_count)} viewers
                 </span>
               </div>
-              <p className="text-sm truncate" style={{ color: theme.text_color }}>
+              <p className={`${isFeatured ? "text-base" : "text-sm"} ${isFeatured ? "" : "truncate"}`} style={{ color: theme.text_color }}>
                 {live.title}
               </p>
               {live.game_name && (

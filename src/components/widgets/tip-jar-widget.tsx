@@ -1,20 +1,44 @@
-import type { TipPlatform } from "@/lib/widgets/types";
+import type { TipPlatform, WidgetSize } from "@/lib/widgets/types";
 import type { Theme } from "@/lib/themes";
 import { TIP_PLATFORMS } from "@/lib/widgets/tip-jar";
+import { CompactRow } from "./compact-row";
 
 export function TipJarWidget({
   platform,
   handle,
   theme,
+  size = "default",
   preview = false,
 }: {
   platform: TipPlatform;
   handle: string;
   theme: Theme;
+  size?: WidgetSize;
   preview?: boolean;
 }) {
   const info = TIP_PLATFORMS[platform];
   const href = preview ? "#" : info.buildUrl(handle);
+
+  if (size === "compact") {
+    return (
+      <CompactRow
+        href={href}
+        preview={preview}
+        theme={theme}
+        icon={
+          <span
+            className="inline-block h-6 w-6 rounded-md flex items-center justify-center text-base"
+            style={{ backgroundColor: info.brand, color: "#0a0a0a" }}
+          >
+            {info.emoji}
+          </span>
+        }
+        title={`Support on ${info.label}`}
+        trailing={`@${handle}`}
+        tag="tip jar"
+      />
+    );
+  }
 
   return (
     <a

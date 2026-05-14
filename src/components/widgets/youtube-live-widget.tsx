@@ -1,16 +1,19 @@
-import type { YouTubeLiveData } from "@/lib/widgets/types";
+import type { YouTubeLiveData, WidgetSize } from "@/lib/widgets/types";
 import type { Theme } from "@/lib/themes";
 import { UpdatedAgo } from "./updated-ago";
+import { CompactRow } from "./compact-row";
 
 export function YouTubeLiveWidget({
   data,
   fallbackUrl,
   theme,
+  size = "default",
   preview = false,
 }: {
   data: YouTubeLiveData | null;
   fallbackUrl: string;
   theme: Theme;
+  size?: WidgetSize;
   preview?: boolean;
 }) {
   const live = data?.live;
@@ -24,6 +27,20 @@ export function YouTubeLiveWidget({
         : channel
           ? `https://youtube.com/channel/${channel.id}`
           : fallbackUrl;
+
+  if (size === "compact") {
+    return (
+      <CompactRow
+        href={href}
+        preview={preview}
+        theme={theme}
+        icon={live ? <LivePulse color="#ef4444" /> : null}
+        title={channel?.title ?? "YouTube channel"}
+        trailing={live ? "LIVE" : data ? "offline" : null}
+        tag="youtube"
+      />
+    );
+  }
 
   return (
     <a

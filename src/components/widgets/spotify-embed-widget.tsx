@@ -1,5 +1,7 @@
 import type { Theme } from "@/lib/themes";
+import type { WidgetSize } from "@/lib/widgets/types";
 import { type SpotifyEntityType, spotifyEmbedUrl, spotifyOpenUrl } from "@/lib/widgets/spotify";
+import { CompactRow } from "./compact-row";
 
 const HEIGHT_FOR: Record<SpotifyEntityType, number> = {
   track: 152,
@@ -14,16 +16,38 @@ export function SpotifyEmbedWidget({
   type,
   id,
   theme,
+  size = "default",
   preview = false,
 }: {
   type: SpotifyEntityType;
   id: string;
   theme: Theme;
+  size?: WidgetSize;
   preview?: boolean;
 }) {
   const height = HEIGHT_FOR[type];
   const embedSrc = spotifyEmbedUrl(type, id);
   const openUrl = spotifyOpenUrl(type, id);
+
+  if (size === "compact") {
+    return (
+      <CompactRow
+        href={preview ? "#" : openUrl}
+        preview={preview}
+        theme={theme}
+        icon={
+          <span
+            className="inline-block h-6 w-6 rounded-md flex items-center justify-center text-base"
+            style={{ backgroundColor: "#1DB954", color: "#000" }}
+          >
+            ♪
+          </span>
+        }
+        title={`Spotify ${type}`}
+        tag="spotify"
+      />
+    );
+  }
 
   if (preview) {
     return (

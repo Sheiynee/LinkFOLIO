@@ -1,19 +1,43 @@
-import type { DiscordInviteData } from "@/lib/widgets/types";
+import type { DiscordInviteData, WidgetSize } from "@/lib/widgets/types";
 import type { Theme } from "@/lib/themes";
+import { CompactRow } from "./compact-row";
 
 export function DiscordInviteWidget({
   inviteCode,
   data,
   theme,
+  size = "default",
   preview = false,
 }: {
   inviteCode: string;
   data: DiscordInviteData | null;
   theme: Theme;
+  size?: WidgetSize;
   preview?: boolean;
 }) {
   const href = preview ? "#" : `https://discord.gg/${data?.invite_code ?? inviteCode}`;
   const guild = data?.guild;
+
+  if (size === "compact") {
+    return (
+      <CompactRow
+        href={href}
+        preview={preview}
+        theme={theme}
+        icon={
+          guild?.icon_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={guild.icon_url} alt={guild.name} className="h-6 w-6 rounded-md object-cover" />
+          ) : (
+            <span className="inline-block h-6 w-6 rounded-md" style={{ background: "#5865F2" }} />
+          )
+        }
+        title={guild?.name ?? "Discord server"}
+        trailing={data?.approximate_member_count != null ? `${formatCount(data.approximate_member_count)} members` : null}
+        tag="discord"
+      />
+    );
+  }
 
   return (
     <a

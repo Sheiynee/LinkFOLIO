@@ -1,15 +1,18 @@
-import type { OgCardData } from "@/lib/widgets/types";
+import type { OgCardData, WidgetSize } from "@/lib/widgets/types";
 import type { Theme } from "@/lib/themes";
+import { CompactRow } from "./compact-row";
 
 export function OgCardWidget({
   data,
   fallbackUrl,
   theme,
+  size = "default",
   preview = false,
 }: {
   data: OgCardData | null;
   fallbackUrl: string;
   theme: Theme;
+  size?: WidgetSize;
   preview?: boolean;
 }) {
   const href = preview ? "#" : data?.url ?? fallbackUrl;
@@ -18,6 +21,18 @@ export function OgCardWidget({
     host = new URL(data?.url ?? fallbackUrl).hostname.replace(/^www\./, "");
   } catch {
     host = data?.site_name ?? "";
+  }
+
+  if (size === "compact") {
+    return (
+      <CompactRow
+        href={href}
+        preview={preview}
+        theme={theme}
+        title={data?.title ?? host ?? "External link"}
+        tag={host}
+      />
+    );
   }
 
   return (

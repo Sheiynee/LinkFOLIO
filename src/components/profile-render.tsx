@@ -6,7 +6,8 @@ import {
   buttonExtraStyle,
 } from "@/lib/themes";
 import type { Block } from "@/lib/blocks";
-import type { WidgetData } from "@/lib/widgets/types";
+import type { WidgetData, WidgetSize } from "@/lib/widgets/types";
+import { isWidgetSize } from "@/lib/widgets/types";
 import { TwitchLiveWidget } from "./widgets/twitch-live-widget";
 import { TwitchVodWidget } from "./widgets/twitch-vod-widget";
 import { YouTubeChannelWidget } from "./widgets/youtube-channel-widget";
@@ -150,6 +151,9 @@ export function ProfileRender({
                 );
               case "widget": {
                 const wd = widgetData[block.id];
+                const widgetSize: WidgetSize = isWidgetSize((block.meta as { size?: unknown } | null)?.size)
+                  ? ((block.meta as { size: WidgetSize }).size)
+                  : "default";
                 if (block.widget_kind === "twitch_live") {
                   const channel = (block.meta as { channel?: string } | null)?.channel ?? block.title ?? "";
                   const data = wd?.kind === "twitch_live" ? wd.data : null;
@@ -159,6 +163,7 @@ export function ProfileRender({
                       channel={channel}
                       data={data}
                       theme={theme}
+                      size={widgetSize}
                       preview={preview}
                     />
                   );
@@ -172,6 +177,7 @@ export function ProfileRender({
                       channel={channel}
                       data={data}
                       theme={theme}
+                      size={widgetSize}
                       preview={preview}
                     />
                   );
@@ -190,6 +196,7 @@ export function ProfileRender({
                       data={data}
                       fallbackUrl={fallbackUrl}
                       theme={theme}
+                      size={widgetSize}
                       preview={preview}
                     />
                   );
@@ -204,6 +211,7 @@ export function ProfileRender({
                       data={data}
                       fallbackUrl={fallbackUrl}
                       theme={theme}
+                      size={widgetSize}
                       preview={preview}
                     />
                   );
@@ -222,6 +230,7 @@ export function ProfileRender({
                       data={data}
                       fallbackUrl={fallbackUrl}
                       theme={theme}
+                      size={widgetSize}
                       preview={preview}
                     />
                   );
@@ -240,6 +249,7 @@ export function ProfileRender({
                       data={data}
                       fallbackUrl={fallbackUrl}
                       theme={theme}
+                      size={widgetSize}
                       preview={preview}
                     />
                   );
@@ -256,6 +266,7 @@ export function ProfileRender({
                       data={data}
                       fallbackUrl={fallbackUrl}
                       theme={theme}
+                      size={widgetSize}
                       preview={preview}
                     />
                   );
@@ -272,6 +283,7 @@ export function ProfileRender({
                       data={data}
                       fallbackUrl={fallbackUrl}
                       theme={theme}
+                      size={widgetSize}
                       preview={preview}
                     />
                   );
@@ -285,6 +297,7 @@ export function ProfileRender({
                       inviteCode={meta.invite_code ?? ""}
                       data={data}
                       theme={theme}
+                      size={widgetSize}
                       preview={preview}
                     />
                   );
@@ -298,6 +311,7 @@ export function ProfileRender({
                       platform={meta.platform}
                       handle={meta.handle}
                       theme={theme}
+                      size={widgetSize}
                       preview={preview}
                     />
                   );
@@ -311,6 +325,7 @@ export function ProfileRender({
                       type={meta.type}
                       id={meta.id}
                       theme={theme}
+                      size={widgetSize}
                       preview={preview}
                     />
                   );
@@ -324,6 +339,7 @@ export function ProfileRender({
                       username={meta.username}
                       videoId={meta.video_id}
                       theme={theme}
+                      size={widgetSize}
                       preview={preview}
                     />
                   );

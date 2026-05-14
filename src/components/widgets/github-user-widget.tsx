@@ -1,18 +1,40 @@
-import type { GitHubUserData } from "@/lib/widgets/types";
+import type { GitHubUserData, WidgetSize } from "@/lib/widgets/types";
 import type { Theme } from "@/lib/themes";
+import { CompactRow } from "./compact-row";
 
 export function GitHubUserWidget({
   data,
   fallbackUrl,
   theme,
+  size = "default",
   preview = false,
 }: {
   data: GitHubUserData | null;
   fallbackUrl: string;
   theme: Theme;
+  size?: WidgetSize;
   preview?: boolean;
 }) {
   const href = preview ? "#" : data?.html_url ?? fallbackUrl;
+
+  if (size === "compact") {
+    return (
+      <CompactRow
+        href={href}
+        preview={preview}
+        theme={theme}
+        icon={
+          data?.avatar_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={data.avatar_url} alt={data.login} className="h-6 w-6 rounded-full object-cover" />
+          ) : null
+        }
+        title={data?.name ?? data?.login ?? "GitHub user"}
+        trailing={data ? `${formatCount(data.followers)} followers` : null}
+        tag="github"
+      />
+    );
+  }
 
   return (
     <a

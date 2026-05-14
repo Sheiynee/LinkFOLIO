@@ -4,7 +4,8 @@ import { auth } from "@/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { type BlockType, normalizeUrl } from "@/lib/blocks";
-import type { WidgetKind } from "@/lib/widgets/types";
+import type { WidgetKind, WidgetSize } from "@/lib/widgets/types";
+import { isWidgetSize } from "@/lib/widgets/types";
 import { parseTwitchChannel } from "@/lib/widgets/twitch";
 import { parseYouTubeUrl } from "@/lib/widgets/youtube";
 import { parseGitHubUrl } from "@/lib/widgets/github";
@@ -284,6 +285,34 @@ function resolveWidget(kind: WidgetKind | "auto", input: string): ResolveResult 
 interface CreateWidgetInput {
   kind: WidgetKind | "auto";
   input: string;
+}
+
+export async function updateWidgetSize({ id, size }: { id: string; size: WidgetSize }) {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Not authenticated" };
+  if (!isWidgetSize(size)) return { error: "Invalid size" };
+
+  const supabase = createAdminClient();
+  const { data: existing } = await supabase
+    .from("blocks")
+    .select("meta")
+    .eq("id", id)
+    .eq("user_id", session.user.id)
+    .single();
+  if (!existing) return { error: "Not found" };
+
+  const nextMeta = { ...(existing.meta ?? {}), size };
+  const { error } = await supabase
+    .from("blocks")
+    .update({ meta: nextMeta })
+    .eq("id", id)
+    .eq("user_id", session.user.id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/dashboard/content");
+  revalidatePath("/dashboard");
+  await revalidatePublicPage(session.user.id);
+  return { ok: true };
 }
 
 export async function updateWidgetBlock({ id, input }: { id: string; input: string }) {

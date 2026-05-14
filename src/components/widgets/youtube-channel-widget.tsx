@@ -1,15 +1,18 @@
-import type { YouTubeChannelData } from "@/lib/widgets/types";
+import type { YouTubeChannelData, WidgetSize } from "@/lib/widgets/types";
 import type { Theme } from "@/lib/themes";
+import { CompactRow } from "./compact-row";
 
 export function YouTubeChannelWidget({
   data,
   fallbackUrl,
   theme,
+  size = "default",
   preview = false,
 }: {
   data: YouTubeChannelData | null;
   fallbackUrl: string;
   theme: Theme;
+  size?: WidgetSize;
   preview?: boolean;
 }) {
   const channel = data?.channel;
@@ -20,6 +23,27 @@ export function YouTubeChannelWidget({
       : channel
         ? `https://youtube.com/channel/${channel.id}`
         : fallbackUrl;
+
+  if (size === "compact") {
+    return (
+      <CompactRow
+        href={href}
+        preview={preview}
+        theme={theme}
+        icon={
+          channel?.thumbnail_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={channel.thumbnail_url} alt={channel.title} className="h-6 w-6 rounded-full object-cover" />
+          ) : null
+        }
+        title={channel?.title ?? "YouTube channel"}
+        trailing={channel ? `${formatCount(channel.subscriber_count)} subs` : null}
+        tag="youtube"
+      />
+    );
+  }
+
+  const isFeatured = size === "featured";
 
   return (
     <a
@@ -34,24 +58,24 @@ export function YouTubeChannelWidget({
         borderColor: theme.button_border,
       }}
     >
-      <div className="flex items-center gap-3 p-3">
+      <div className={`flex items-center gap-3 ${isFeatured ? "p-4" : "p-3"}`}>
         {channel?.thumbnail_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={channel.thumbnail_url}
             alt={channel.title}
-            className="h-12 w-12 rounded-full object-cover shrink-0"
+            className={`${isFeatured ? "h-20 w-20" : "h-12 w-12"} rounded-full object-cover shrink-0`}
           />
         ) : (
           <div
-            className="h-12 w-12 rounded-full shrink-0"
+            className={`${isFeatured ? "h-20 w-20" : "h-12 w-12"} rounded-full shrink-0`}
             style={{ backgroundColor: theme.muted_color, opacity: 0.3 }}
           />
         )}
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            <span className="font-semibold truncate">
+            <span className={`${isFeatured ? "text-xl" : ""} font-semibold truncate`}>
               {channel?.title ?? "YouTube channel"}
             </span>
             <span

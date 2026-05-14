@@ -1,3 +1,11 @@
+export type WidgetSize = "compact" | "default" | "featured";
+
+export const WIDGET_SIZES: WidgetSize[] = ["compact", "default", "featured"];
+
+export function isWidgetSize(s: unknown): s is WidgetSize {
+  return s === "compact" || s === "default" || s === "featured";
+}
+
 export type WidgetKind =
   | "twitch_live"
   | "twitch_vod"

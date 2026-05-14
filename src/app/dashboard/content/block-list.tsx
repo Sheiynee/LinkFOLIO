@@ -28,8 +28,13 @@ import {
   Video,
   Link as LinkIcon,
   PlaySquare,
+  Rows3,
+  Square,
+  LayoutGrid,
 } from "lucide-react";
-import { createBlock, createWidgetBlock, updateWidgetBlock, updateBlock, deleteBlock, reorderBlocks, toggleBlockVisibility } from "./actions";
+import { createBlock, createWidgetBlock, updateWidgetBlock, updateWidgetSize, updateBlock, deleteBlock, reorderBlocks, toggleBlockVisibility } from "./actions";
+import type { WidgetSize } from "@/lib/widgets/types";
+import { isWidgetSize } from "@/lib/widgets/types";
 import type { Block, BlockType } from "@/lib/blocks";
 import { BLOCK_LABELS } from "@/lib/blocks";
 import {
@@ -184,6 +189,21 @@ export function BlockList({ initial }: { initial: Block[] }) {
     });
   }
 
+  function handleSize(id: string, size: WidgetSize) {
+    setError(null);
+    setBlocks((prev) =>
+      prev.map((b) =>
+        b.id === id
+          ? { ...b, meta: { ...((b.meta ?? {}) as Record<string, unknown>), size } as Block["meta"] }
+          : b
+      )
+    );
+    startTransition(async () => {
+      const result = await updateWidgetSize({ id, size });
+      if ("error" in result && result.error) setError(result.error);
+    });
+  }
+
   function handleToggleVisibility(id: string, currentVisible: boolean) {
     const next = !currentVisible;
     setBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, visible: next } : b)));
@@ -244,6 +264,7 @@ export function BlockList({ initial }: { initial: Block[] }) {
                 onSubmit={(fd) => handleUpdate(block, fd)}
                 onDelete={() => handleDelete(block.id)}
                 onToggleVisibility={() => handleToggleVisibility(block.id, block.visible !== false)}
+                onSizeChange={(size) => handleSize(block.id, size)}
                 pending={pending}
               />
             ))}
@@ -657,6 +678,7 @@ function SortableBlockItem({
   onSubmit,
   onDelete,
   onToggleVisibility,
+  onSizeChange,
   pending,
 }: {
   block: Block;
@@ -666,6 +688,7 @@ function SortableBlockItem({
   onSubmit: (fd: FormData) => void;
   onDelete: () => void;
   onToggleVisibility: () => void;
+  onSizeChange: (size: WidgetSize) => void;
   pending: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -770,6 +793,13 @@ function SortableBlockItem({
           </>
         )}
       </div>
+      {block.type === "widget" && (
+        <WidgetSizeToggle
+          current={widgetSizeFromBlock(block)}
+          onChange={onSizeChange}
+          pending={pending}
+        />
+      )}
       <Button
         size="icon"
         variant="ghost"
@@ -788,5 +818,47 @@ function SortableBlockItem({
         <Trash2 className="h-4 w-4" />
       </Button>
     </li>
+  );
+}
+
+function widgetSizeFromBlock(block: Block): WidgetSize {
+  const s = (block.meta as { size?: unknown } | null)?.size;
+  return isWidgetSize(s) ? s : "default";
+}
+
+function WidgetSizeToggle({
+  current,
+  onChange,
+  pending,
+}: {
+  current: WidgetSize;
+  onChange: (size: WidgetSize) => void;
+  pending: boolean;
+}) {
+  const options: Array<{ size: WidgetSize; Icon: typeof Rows3; label: string }> = [
+    { size: "compact", Icon: Rows3, label: "Compact" },
+    { size: "default", Icon: Square, label: "Default" },
+    { size: "featured", Icon: LayoutGrid, label: "Featured" },
+  ];
+  return (
+    <div className="hidden sm:flex items-center rounded-md border p-0.5">
+      {options.map(({ size, Icon, label }) => (
+        <button
+          key={size}
+          type="button"
+          aria-label={label}
+          title={label}
+          disabled={pending || current === size}
+          onClick={() => onChange(size)}
+          className={`h-7 w-7 rounded flex items-center justify-center transition ${
+            current === size
+              ? "bg-foreground text-background"
+              : "text-muted-foreground hover:text-foreground"
+          } disabled:cursor-default`}
+        >
+          <Icon className="h-3.5 w-3.5" />
+        </button>
+      ))}
+    </div>
   );
 }

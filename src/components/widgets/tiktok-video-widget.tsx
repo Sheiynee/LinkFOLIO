@@ -1,17 +1,41 @@
 import type { Theme } from "@/lib/themes";
+import type { WidgetSize } from "@/lib/widgets/types";
+import { CompactRow } from "./compact-row";
 
 export function TikTokVideoWidget({
   username,
   videoId,
   theme,
+  size = "default",
   preview = false,
 }: {
   username: string;
   videoId: string;
   theme: Theme;
+  size?: WidgetSize;
   preview?: boolean;
 }) {
   const href = preview ? "#" : `https://www.tiktok.com/@${username}/video/${videoId}`;
+
+  if (size === "compact") {
+    return (
+      <CompactRow
+        href={href}
+        preview={preview}
+        theme={theme}
+        icon={
+          <span
+            className="inline-block h-6 w-6 rounded-md flex items-center justify-center font-bold text-sm text-white"
+            style={{ background: "linear-gradient(135deg, #25F4EE 0%, #000 50%, #FE2C55 100%)" }}
+          >
+            ♪
+          </span>
+        }
+        title={`@${username}`}
+        tag="tiktok"
+      />
+    );
+  }
 
   return (
     <a

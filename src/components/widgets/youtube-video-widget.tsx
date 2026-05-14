@@ -1,15 +1,18 @@
-import type { YouTubeVideoData } from "@/lib/widgets/types";
+import type { YouTubeVideoData, WidgetSize } from "@/lib/widgets/types";
 import type { Theme } from "@/lib/themes";
+import { CompactRow } from "./compact-row";
 
 export function YouTubeVideoWidget({
   data,
   fallbackUrl,
   theme,
+  size = "default",
   preview = false,
 }: {
   data: YouTubeVideoData | null;
   fallbackUrl: string;
   theme: Theme;
+  size?: WidgetSize;
   preview?: boolean;
 }) {
   const video = data?.video;
@@ -18,6 +21,19 @@ export function YouTubeVideoWidget({
     : video
       ? `https://youtube.com/watch?v=${video.id}`
       : fallbackUrl;
+
+  if (size === "compact") {
+    return (
+      <CompactRow
+        href={href}
+        preview={preview}
+        theme={theme}
+        title={video?.title ?? "Latest video"}
+        trailing={video?.view_count != null ? `${formatCount(video.view_count)}` : null}
+        tag="youtube"
+      />
+    );
+  }
 
   return (
     <a

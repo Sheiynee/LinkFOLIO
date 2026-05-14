@@ -1,16 +1,19 @@
-import type { TwitchVodData } from "@/lib/widgets/types";
+import type { TwitchVodData, WidgetSize } from "@/lib/widgets/types";
 import type { Theme } from "@/lib/themes";
 import { UpdatedAgo } from "./updated-ago";
+import { CompactRow } from "./compact-row";
 
 export function TwitchVodWidget({
   channel,
   data,
   theme,
+  size = "default",
   preview = false,
 }: {
   channel: string;
   data: TwitchVodData | null;
   theme: Theme;
+  size?: WidgetSize;
   preview?: boolean;
 }) {
   const vod = data?.video;
@@ -18,6 +21,19 @@ export function TwitchVodWidget({
   const href = preview
     ? "#"
     : vod?.url ?? `https://twitch.tv/${channel}/videos`;
+
+  if (size === "compact") {
+    return (
+      <CompactRow
+        href={href}
+        preview={preview}
+        theme={theme}
+        title={vod?.title ?? `${user?.display_name ?? channel} — latest VOD`}
+        trailing={vod ? `${formatCount(vod.view_count)}` : null}
+        tag="twitch · vod"
+      />
+    );
+  }
 
   return (
     <a

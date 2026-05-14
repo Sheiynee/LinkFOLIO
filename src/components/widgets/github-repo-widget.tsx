@@ -1,18 +1,34 @@
-import type { GitHubRepoData } from "@/lib/widgets/types";
+import type { GitHubRepoData, WidgetSize } from "@/lib/widgets/types";
 import type { Theme } from "@/lib/themes";
+import { CompactRow } from "./compact-row";
 
 export function GitHubRepoWidget({
   data,
   fallbackUrl,
   theme,
+  size = "default",
   preview = false,
 }: {
   data: GitHubRepoData | null;
   fallbackUrl: string;
   theme: Theme;
+  size?: WidgetSize;
   preview?: boolean;
 }) {
   const href = preview ? "#" : data?.html_url ?? fallbackUrl;
+
+  if (size === "compact") {
+    return (
+      <CompactRow
+        href={href}
+        preview={preview}
+        theme={theme}
+        title={data?.full_name ?? "GitHub repo"}
+        trailing={data ? `★ ${formatCount(data.stargazers_count)}` : null}
+        tag="github"
+      />
+    );
+  }
 
   return (
     <a
