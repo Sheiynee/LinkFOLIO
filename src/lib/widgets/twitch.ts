@@ -162,13 +162,29 @@ export async function getTwitchLatestVod(channel: string): Promise<TwitchVodData
           id: vod.id,
           title: vod.title,
           url: vod.url,
-          thumbnail_url: vod.thumbnail_url.replace("%{width}", "640").replace("%{height}", "360"),
+          thumbnail_url: resolveTwitchThumbnail(vod.thumbnail_url),
           duration: vod.duration,
           published_at: vod.published_at,
           view_count: vod.view_count,
         }
       : null,
   };
+}
+
+// Twitch returns two placeholder formats:
+//   - "%{width}" / "%{height}" for processed VODs
+//   - "{width}" / "{height}" inside the "_404_processing" placeholder URL
+//     that's served for fresh VODs whose thumbnail hasn't been generated yet
+// Return an empty string when the VOD is still processing so the widget
+// renders its theme-aware fallback panel instead of a broken image.
+function resolveTwitchThumbnail(raw: string): string {
+  if (!raw) return "";
+  if (raw.includes("404_processing")) return "";
+  return raw
+    .replace(/%\{width\}/g, "640")
+    .replace(/%\{height\}/g, "360")
+    .replace(/\{width\}/g, "640")
+    .replace(/\{height\}/g, "360");
 }
 
 export function parseTwitchChannel(url: string): string | null {
