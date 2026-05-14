@@ -350,7 +350,13 @@ export async function createWidgetBlock({ kind, input }: CreateWidgetInput) {
   revalidatePath("/dashboard/content");
   revalidatePath("/dashboard");
   await revalidatePublicPage(session.user.id);
-  return { ok: true, id: data!.id };
+  return {
+    ok: true,
+    id: data!.id,
+    kind: finalKind,
+    meta,
+    title,
+  };
 }
 
 export async function reorderBlocks(orderedIds: string[]) {

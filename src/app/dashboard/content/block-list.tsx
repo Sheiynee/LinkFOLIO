@@ -107,16 +107,16 @@ export function BlockList({ initial }: { initial: Block[] }) {
         setError(result.error);
         return;
       }
-      // Server is the source of truth for resolved kind/meta — reload via revalidate.
-      // Use an optimistic placeholder so the row appears immediately.
+      // Server resolves the final kind/meta/title (e.g. "auto" → "twitch_live").
+      const ok = "id" in result ? result : null;
       const newBlock: Block = {
-        id: result.id ?? crypto.randomUUID(),
+        id: ok?.id ?? crypto.randomUUID(),
         type: "widget",
-        widget_kind: kind === "auto" ? null : kind,
-        title: input,
+        widget_kind: (ok?.kind ?? (kind === "auto" ? null : kind)) as Block["widget_kind"],
+        title: ok?.title ?? input,
         url: null,
         content: null,
-        meta: null,
+        meta: (ok?.meta ?? null) as Block["meta"],
       };
       setBlocks((prev) => [...prev, newBlock]);
       setAddingWidget(null);
@@ -135,14 +135,19 @@ export function BlockList({ initial }: { initial: Block[] }) {
       }
       startTransition(async () => {
         const result = await updateWidgetBlock({ id: block.id, input: widgetInput });
-        if ("error" in result) {
+        if ("error" in result && result.error) {
           setError(result.error);
           return;
         }
+        const ok = "ok" in result ? result : null;
         setBlocks((prev) =>
           prev.map((b) =>
             b.id === block.id
-              ? { ...b, meta: result.meta ?? b.meta, title: result.title ?? b.title }
+              ? {
+                  ...b,
+                  meta: (ok?.meta ?? b.meta) as Block["meta"],
+                  title: ok?.title ?? b.title,
+                }
               : b
           )
         );

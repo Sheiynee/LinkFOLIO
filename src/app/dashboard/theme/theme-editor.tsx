@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ProfileRender, type ProfileRenderData } from "@/components/profile-render";
+import type { WidgetData } from "@/lib/widgets/types";
 import { FONTS } from "@/lib/fonts";
 import {
   type Theme,
@@ -21,9 +22,10 @@ import { Check, Upload, X } from "lucide-react";
 interface Props {
   initialTheme: Theme;
   profile: ProfileRenderData;
+  widgetData?: Record<string, WidgetData>;
 }
 
-export function ThemeEditor({ initialTheme, profile }: Props) {
+export function ThemeEditor({ initialTheme, profile, widgetData }: Props) {
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [pending, startTransition] = useTransition();
   const [uploadPending, startUpload] = useTransition();
@@ -246,7 +248,7 @@ export function ThemeEditor({ initialTheme, profile }: Props) {
             Preview · /{profile.username}
           </div>
           <div className="h-[640px] overflow-y-auto">
-            <ProfileRender profile={profile} theme={theme} preview />
+            <ProfileRender profile={profile} theme={theme} preview widgetData={widgetData} />
           </div>
         </Card>
       </div>
