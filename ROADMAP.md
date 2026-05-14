@@ -67,42 +67,58 @@ Target users, in order: Twitch streamers → YouTubers / video creators → musi
 - Dark/light mode toggle (`next-themes`)
 - Branded loader on every route transition
 
+### Creator widgets (Phase 1 shipped)
+- New block kind `widget` with `widget_kind` enum + `meta jsonb` config
+- Server-side fetch with per-kind cache windows (30s for live status, 5–30m for static metadata)
+- Theme-aware rendering — every widget inherits the page's palette via inline styles, brand identity preserved through icon + small `tag` chip
+- Pre-fetch all widget data in parallel before rendering the public page
+- Provider token cache table (`app_tokens`) for Twitch app access token
+- 10 widget kinds live:
+  - **Twitch live status** — pulsing badge, viewers, game (30s revalidate)
+  - **YouTube channel** — subscriber + video count (1h)
+  - **YouTube latest video** — thumbnail, title, view count, time-ago (5m)
+  - **GitHub repo** — stars, forks, language, description (10m)
+  - **GitHub user** — followers + public repo count (30m)
+  - **Discord invite** — member + online count (5m)
+  - **Spotify embed** — real iframe player for track/album/artist/playlist/episode/show
+  - **TikTok video** — branded gradient card linking out
+  - **Tip jar** — Ko-fi, Buy Me a Coffee, Patreon, Streamlabs (deep links with brand colors)
+
+### URL auto-detect on paste
+- One paste-any-URL widget option resolves to the right widget kind + metadata
+- Detects: `twitch.tv/{user}`, `youtube.com/@handle`, `youtube.com/channel/UC…`, `youtube.com/watch?v=…`, `youtu.be/…`, `youtube.com/shorts/…`, `github.com/owner`, `github.com/owner/repo`, `discord.gg/x`, `open.spotify.com/{type}/{id}`, `spotify:` URIs, `tiktok.com/@user/video/…`, and `ko-fi/buymeacoffee/patreon/streamlabs.com/x`
+
+### Auto-generated OG images
+- `/api/og/[username]` runs on Node runtime via `next/og`; pulls avatar, display name, handle, bio, and brand palette into a themed 1200×630 share card
+- Wired into `og:image` + Twitter `summary_large_image` so links unfurl in Discord / Slack / LinkedIn / Facebook
+- `metadataBase` derived from `NEXT_PUBLIC_SITE_URL` or `VERCEL_PROJECT_PRODUCTION_URL` for absolute URLs
+
 ### Infrastructure
-- All SQL migrations in `supabase/*.sql` (00–06)
+- All SQL migrations in `supabase/*.sql` (01–07)
 - Server actions for every mutation
 - `revalidatePath` wired so dashboard + public page stay in sync
+- `.gitattributes` normalizes line endings to LF
 
 ---
 
-## 🚧 Phase 1 — Creator widget foundation (current)
+## 🚧 Phase 1 — Widget polish (remaining)
 
-> *The headline feature. Without rich live widgets, we are a Linktree clone with better theming.*
+The widget catalogue + auto-detect shipped. What's left in Phase 1 is making widgets feel alive at scale and filling in the few Tier-1 gaps.
 
-New block kind `widget` with sub-kinds. `meta jsonb` holds widget config. Server-side data fetch with smart caching so public pages stay snappy and accurate.
+### Remaining Tier-1 widgets
+- **Twitch latest VOD** — Helix `/videos?user_id={id}&type=archive&first=1`
+- **YouTube live status** — distinct from latest-video; "live now" badge if `liveBroadcastContent === "live"`
+- **Generic OG card** — `<meta property="og:*">` scrape for any unrecognized URL (the "anything else" fallback in auto-detect)
 
-### Widget catalogue
+### Live-data freshness — phase 2
+What's done: per-kind `next: { revalidate }` cache windows. What's left:
+- **Client revalidation on tab focus**: lightweight client wrapper that calls a server action when the tab becomes visible after >30s
+- **Visible "updated 2 min ago" indicator** on live widgets so static-looking states don't feel broken
+- **Twitch EventSub**: subscribe to `stream.online` / `stream.offline` events for known streamers. Webhook updates a `creator_live_status` table; pages read from it. Removes polling cost at scale.
+- **Smart polling**: only revalidate for creators whose pages were viewed in the last 5 minutes
+- **Graceful degradation**: API down → show last known state with subtle "last seen" note. Never render a broken widget.
 
-#### Tier 1 — public APIs / embeds, ship in this phase
-| Kind | Source | Auth | Liveness |
-|---|---|---|---|
-| **Twitch live status** | Helix API | App-level (client_id + secret) | Live now / offline + game + viewer count |
-| **Twitch latest VOD** | Helix API | App-level | Static |
-| **YouTube latest video** | YouTube Data API v3 | API key | Static (5 min cache) |
-| **YouTube channel stats** | YouTube Data API v3 | API key | Subscribers + view count |
-| **YouTube live status** | YouTube Data API v3 | API key | Live now badge |
-| **Spotify track / album** | Spotify embed iframe | none | Static |
-| **Spotify artist top tracks** | Embed | none | Static |
-| **TikTok latest video** | oEmbed / embed iframe | none | Static |
-| **GitHub repo card** | `api.github.com/repos/{o}/{r}` | optional token | Static |
-| **GitHub profile** | `api.github.com/users/{u}` | optional token | Static |
-| **Discord server invite** | Widget API | none | Member count + online |
-| **Tip jar — Ko-fi** | Branded deep link | none | Static |
-| **Tip jar — Buy Me a Coffee** | Branded deep link | none | Static |
-| **Tip jar — Patreon** | Branded deep link | none | Static |
-| **Streamlabs tip button** | Deep link | none | Static |
-| **Generic OG card** | OG metadata scrape | none | Static |
-
-#### Tier 2 — deferred to Phase 6 (needs OAuth or evolving APIs)
+### Tier 2 — still deferred to Phase 6 (needs OAuth or evolving APIs)
 - Spotify "now playing" (per-user OAuth + token refresh)
 - Steam profile (recently played, achievements)
 - Last.fm scrobbles
@@ -112,37 +128,8 @@ New block kind `widget` with sub-kinds. `meta jsonb` holds widget config. Server
 - Kick live status (API still maturing)
 - Instagram latest post (API limitations)
 
-### Live-data freshness system
-
-A real subsystem, not a per-widget afterthought.
-
-- **Server cache**: `fetch` with `next: { revalidate: <seconds> }`. 30s for live status, 5 min for static metadata, 1 hour for profile data.
-- **Client revalidation on tab focus**: lightweight client wrapper that calls a server action when the tab becomes visible after >30s.
-- **Visible state**: pulsing "LIVE" badge, recent timestamp footer, "updated 2 min ago" indicator. Static-looking widgets feel broken.
-- **Twitch EventSub**: subscribe to `stream.online` / `stream.offline` events for known streamers. Webhook updates a `creator_live_status` table; pages read from it. Removes polling cost at scale.
-- **Smart polling**: only poll for creators whose pages were viewed in the last 5 minutes.
-- **Graceful degradation**: API down → show last known state with subtle "last seen" note. Never render a broken widget.
-
-### Themeable widget rendering
-
-Every widget must inherit the page's palette and typography. A Twitch widget rendered with Twitch purple on a creator's pastel-themed page kills the brand. Specifically:
-
-- Widgets receive theme tokens via CSS variables, not hardcoded colors.
-- Brand identity preserved through icon + small accent dot, not full background color.
-- Multiple size variants per widget (1×1 small, 2×1 wide, 2×2 large) with consistent visual weight at each size.
-
-### Auto-detect on URL paste
-Paste a URL → app figures out which widget kind:
-- `twitch.tv/{user}` → Twitch live status
-- `youtube.com/@{handle}` or `/channel/{id}` → YouTube channel
-- `youtube.com/watch?v=...` → YouTube video
-- `tiktok.com/@{user}/video/{id}` → TikTok video
-- `tiktok.com/@{user}` → TikTok profile
-- `open.spotify.com/...` → Spotify embed
-- `github.com/{u}/{r}` → GitHub repo; `github.com/{u}` → GitHub profile
-- `discord.gg/{code}` → Discord server invite
-- `ko-fi.com/{user}` / `buymeacoffee.com/{user}` / `patreon.com/{user}` → tip jar
-- anything else → generic OG card
+### Widget size variants
+- Multiple size variants per widget (1×1 small, 2×1 wide, 2×2 large) with consistent visual weight at each size. Currently every widget is one width.
 
 ---
 
@@ -182,13 +169,12 @@ Examples: Editorial · Brutalist · Soft · Tech · Magazine · Handwritten · M
 
 ## 🟠 Phase 3 — Make it look genuinely different
 
+Visual depth is the moat against Linktree and the parity feature against Bento. Pages on LinkFolio should be unmistakably *not templates*.
+
 ### QOL carry-over from Phase 1
 - Edit widget metadata in place (currently delete-and-re-add)
-- Widget previews in the theme editor pane
-- Optimistic UI returns resolved widget metadata so the dashboard list shows the right label immediately
-
-
-Visual depth is the moat against Linktree and the parity feature against Bento. Pages on LinkFolio should be unmistakably *not templates*.
+- Widget previews in the theme editor pane (preview shows widget shells but not real fetched data)
+- Optimistic UI returns resolved widget metadata so the dashboard list shows the right label immediately, not the raw input
 
 ### Typography subsystem (replaces flat font picker)
 
@@ -318,8 +304,7 @@ All operational and compliance work that must land before public launch, regardl
 - Bundle analysis + lucide tree-shake
 
 ### Sharing & SEO
-- **Auto-generated OG images per profile** via `@vercel/og` — pulls avatar, handle, bio, brand palette, typography. Critical because creators share their LinkFolio link constantly. Live-now badge if streamer is live at share time.
-- Twitter card meta tags
+- **Live-now badge on OG images** — when a streamer is live at share time, the OG card reflects it. Requires Twitch EventSub from Phase 1's freshness work.
 - QR code modal for the public URL
 - Native Web Share API button
 - Robots.txt + sitemap (opt-in)
@@ -459,12 +444,12 @@ These come up often. Saying no is part of the strategy.
 | 04 | `04_theme_and_blocks.sql` | `profiles.theme` → `jsonb`, `backgrounds` bucket |
 | 05 | `05_blocks.sql` | New `blocks` table replacing `links`, RLS, account-link trigger |
 | 06 | `06_analytics_and_visibility.sql` | `blocks.visible`, `block_clicks`, `page_views` policy + grants |
+| 07 | `07_widgets.sql` | `blocks.widget_kind` + `meta`; `app_tokens` for Twitch token cache |
 
 ### Planned migrations
 
 | # | Purpose | Phase |
 |---|---|---|
-| 07 | `widgets`: extend `blocks.kind`, document `meta` shapes per widget | 1 |
 | 08 | `creator_live_status`: cached live state per creator with EventSub timestamps | 1 |
 | 09 | `theme_typography`: restructure `profiles.theme` into role-based typography | 3 |
 | 10 | `user_fonts`: per-user font uploads, `fonts` bucket | 3 |
