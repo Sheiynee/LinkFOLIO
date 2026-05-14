@@ -17,8 +17,10 @@ import {
   Minus,
   Eye,
   EyeOff,
+  Radio,
+  Sparkles,
 } from "lucide-react";
-import { createBlock, updateBlock, deleteBlock, reorderBlocks, toggleBlockVisibility } from "./actions";
+import { createBlock, createWidgetBlock, updateBlock, deleteBlock, reorderBlocks, toggleBlockVisibility } from "./actions";
 import type { Block, BlockType } from "@/lib/blocks";
 import { BLOCK_LABELS } from "@/lib/blocks";
 import {
@@ -42,6 +44,7 @@ const TYPE_ICONS: Record<BlockType, React.ComponentType<{ className?: string }>>
   text: Type,
   heading: HeadingIcon,
   divider: Minus,
+  widget: Sparkles,
 };
 
 export function BlockList({ initial }: { initial: Block[] }) {
@@ -50,6 +53,7 @@ export function BlockList({ initial }: { initial: Block[] }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [adding, setAdding] = useState<BlockType | null>(null);
+  const [addingWidget, setAddingWidget] = useState<"twitch_live" | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -77,6 +81,34 @@ export function BlockList({ initial }: { initial: Block[] }) {
         content: input.content?.trim() || null,
       };
       setBlocks((prev) => [...prev, newBlock]);
+      setAdding(null);
+    });
+  }
+
+  function handleAddWidget(kind: "twitch_live", formData: FormData) {
+    setError(null);
+    const input = (formData.get("input") as string | null)?.trim() ?? "";
+    if (!input) {
+      setError("Enter a channel name or URL");
+      return;
+    }
+    startTransition(async () => {
+      const result = await createWidgetBlock({ kind, input });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      const newBlock: Block = {
+        id: result.id ?? crypto.randomUUID(),
+        type: "widget",
+        widget_kind: kind,
+        title: input,
+        url: null,
+        content: null,
+        meta: { channel: input },
+      };
+      setBlocks((prev) => [...prev, newBlock]);
+      setAddingWidget(null);
       setAdding(null);
     });
   }
@@ -184,11 +216,23 @@ export function BlockList({ initial }: { initial: Block[] }) {
       </DndContext>
 
       <div className="rounded-lg border p-4 bg-muted/30 space-y-3">
-        {!adding ? (
+        {addingWidget ? (
+          <WidgetForm
+            kind={addingWidget}
+            pending={pending}
+            onCancel={() => setAddingWidget(null)}
+            onSubmit={(fd) => handleAddWidget(addingWidget, fd)}
+          />
+        ) : adding === "widget" ? (
+          <WidgetPicker
+            onPick={(kind) => setAddingWidget(kind)}
+            onCancel={() => setAdding(null)}
+          />
+        ) : !adding ? (
           <>
             <h3 className="font-medium text-sm">Add a block</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {(["link", "text", "heading", "divider"] as BlockType[]).map((t) => {
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              {(["link", "text", "heading", "divider", "widget"] as BlockType[]).map((t) => {
                 const Icon = TYPE_ICONS[t];
                 return (
                   <Button
@@ -222,6 +266,79 @@ export function BlockList({ initial }: { initial: Block[] }) {
         )}
       </div>
     </div>
+  );
+}
+
+function WidgetPicker({
+  onPick,
+  onCancel,
+}: {
+  onPick: (kind: "twitch_live") => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="font-medium text-sm">Pick a widget</h3>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPick("twitch_live")}
+          className="justify-start"
+        >
+          <Radio className="h-4 w-4 mr-2" />
+          Twitch live status
+        </Button>
+        <div className="text-xs text-muted-foreground self-center px-2">
+          More widgets coming soon — YouTube, Spotify, GitHub…
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WidgetForm({
+  kind,
+  pending,
+  onSubmit,
+  onCancel,
+}: {
+  kind: "twitch_live";
+  pending: boolean;
+  onSubmit: (fd: FormData) => void;
+  onCancel: () => void;
+}) {
+  const label = kind === "twitch_live" ? "Twitch live status" : kind;
+  return (
+    <form action={onSubmit} className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="font-medium text-sm">Add {label}</h3>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="input">Twitch channel</Label>
+        <Input
+          id="input"
+          name="input"
+          placeholder="e.g. shroud or https://twitch.tv/shroud"
+          required
+        />
+        <p className="text-xs text-muted-foreground">
+          Shows a live indicator + viewer count when the channel is streaming.
+        </p>
+      </div>
+      <Button type="submit" disabled={pending}>
+        {pending ? "Adding..." : "Add widget"}
+      </Button>
+    </form>
   );
 }
 
@@ -368,6 +485,16 @@ function SortableBlockItem({
         {block.type === "divider" && (
           <p className="text-sm text-muted-foreground italic">Divider</p>
         )}
+        {block.type === "widget" && (
+          <>
+            <p className="font-medium truncate">
+              {block.widget_kind === "twitch_live" ? "Twitch live" : "Widget"}
+            </p>
+            <p className="text-sm text-muted-foreground truncate">
+              {(block.meta as { channel?: string } | null)?.channel ?? block.title ?? ""}
+            </p>
+          </>
+        )}
       </div>
       <Button
         size="icon"
@@ -378,7 +505,7 @@ function SortableBlockItem({
       >
         {isHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
       </Button>
-      {block.type !== "divider" && (
+      {block.type !== "divider" && block.type !== "widget" && (
         <Button size="icon" variant="ghost" onClick={onStartEdit} aria-label="Edit">
           <Pencil className="h-4 w-4" />
         </Button>

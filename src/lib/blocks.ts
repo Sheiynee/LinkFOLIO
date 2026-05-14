@@ -1,4 +1,6 @@
-export type BlockType = "link" | "text" | "heading" | "divider";
+import type { WidgetKind } from "./widgets/types";
+
+export type BlockType = "link" | "text" | "heading" | "divider" | "widget";
 
 export interface Block {
   id: string;
@@ -7,6 +9,8 @@ export interface Block {
   url: string | null;
   content: string | null;
   visible?: boolean;
+  widget_kind?: WidgetKind | null;
+  meta?: Record<string, unknown> | null;
 }
 
 export const BLOCK_LABELS: Record<BlockType, string> = {
@@ -14,6 +18,7 @@ export const BLOCK_LABELS: Record<BlockType, string> = {
   text: "Text",
   heading: "Heading",
   divider: "Divider",
+  widget: "Widget",
 };
 
 export const BLOCK_DESCRIPTIONS: Record<BlockType, string> = {
@@ -21,6 +26,7 @@ export const BLOCK_DESCRIPTIONS: Record<BlockType, string> = {
   text: "A paragraph of text",
   heading: "A section title",
   divider: "A horizontal line to separate sections",
+  widget: "A live block from another platform",
 };
 
 export function normalizeUrl(raw: string): string | null {

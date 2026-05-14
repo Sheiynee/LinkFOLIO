@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ProfileRender, type ProfileRenderData } from "@/components/profile-render";
 import { normalizeTheme } from "@/lib/themes";
 import type { Block } from "@/lib/blocks";
+import type { WidgetData } from "@/lib/widgets/types";
+import { getTwitchLiveStatus } from "@/lib/widgets/twitch";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -26,12 +28,31 @@ async function getProfile(username: string) {
 
   const { data: blocks } = await supabase
     .from("blocks")
-    .select("id, type, title, url, content, visible")
+    .select("id, type, title, url, content, visible, widget_kind, meta")
     .eq("user_id", profile.id)
     .eq("visible", true)
     .order("position", { ascending: true });
 
   return { ...profile, blocks: (blocks ?? []) as Block[] };
+}
+
+async function loadWidgetData(blocks: Block[]): Promise<Record<string, WidgetData>> {
+  const widgetBlocks = blocks.filter((b) => b.type === "widget");
+  if (widgetBlocks.length === 0) return {};
+
+  const entries = await Promise.all(
+    widgetBlocks.map(async (block): Promise<[string, WidgetData] | null> => {
+      if (block.widget_kind === "twitch_live") {
+        const channel = (block.meta as { channel?: string } | null)?.channel;
+        if (!channel) return null;
+        const data = await getTwitchLiveStatus(channel);
+        return [block.id, { kind: "twitch_live", data }];
+      }
+      return null;
+    })
+  );
+
+  return Object.fromEntries(entries.filter((e): e is [string, WidgetData] => e !== null));
 }
 
 async function trackPageView(profileId: string) {
@@ -71,6 +92,7 @@ export default async function PublicProfilePage({ params }: Props) {
   await trackPageView(profile.id);
 
   const theme = normalizeTheme(profile.theme);
+  const widgetData = await loadWidgetData(profile.blocks);
   const data: ProfileRenderData = {
     username: profile.username,
     display_name: profile.display_name,
@@ -81,7 +103,7 @@ export default async function PublicProfilePage({ params }: Props) {
 
   return (
     <main className="min-h-screen">
-      <ProfileRender profile={data} theme={theme} />
+      <ProfileRender profile={data} theme={theme} widgetData={widgetData} />
     </main>
   );
 }

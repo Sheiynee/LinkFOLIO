@@ -4,6 +4,8 @@ import { auth } from "@/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { type BlockType, normalizeUrl } from "@/lib/blocks";
+import type { WidgetKind } from "@/lib/widgets/types";
+import { parseTwitchChannel } from "@/lib/widgets/twitch";
 
 async function revalidatePublicPage(userId: string) {
   const supabase = createAdminClient();
@@ -148,6 +150,59 @@ export async function deleteBlock(id: string) {
   revalidatePath("/dashboard");
   await revalidatePublicPage(session.user.id);
   return { ok: true };
+}
+
+interface CreateWidgetInput {
+  kind: WidgetKind;
+  input: string;
+}
+
+export async function createWidgetBlock({ kind, input }: CreateWidgetInput) {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Not authenticated" };
+
+  let meta: Record<string, unknown> | null = null;
+  let title: string | null = null;
+
+  if (kind === "twitch_live") {
+    const channel = parseTwitchChannel(input) ?? input.trim().toLowerCase();
+    if (!/^[a-zA-Z0-9_]{3,25}$/.test(channel)) {
+      return { error: "Enter a Twitch channel name or twitch.tv URL" };
+    }
+    meta = { channel };
+    title = channel;
+  } else {
+    return { error: "Widget kind not implemented yet" };
+  }
+
+  const supabase = createAdminClient();
+  const { data: maxRow } = await supabase
+    .from("blocks")
+    .select("position")
+    .eq("user_id", session.user.id)
+    .order("position", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const position = (maxRow?.position ?? -1) + 1;
+
+  const { data, error } = await supabase
+    .from("blocks")
+    .insert({
+      user_id: session.user.id,
+      type: "widget",
+      widget_kind: kind,
+      position,
+      title,
+      meta,
+    })
+    .select("id")
+    .single();
+  if (error) return { error: error.message };
+
+  revalidatePath("/dashboard/content");
+  revalidatePath("/dashboard");
+  await revalidatePublicPage(session.user.id);
+  return { ok: true, id: data!.id };
 }
 
 export async function reorderBlocks(orderedIds: string[]) {

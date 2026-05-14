@@ -6,6 +6,8 @@ import {
   buttonExtraStyle,
 } from "@/lib/themes";
 import type { Block } from "@/lib/blocks";
+import type { WidgetData } from "@/lib/widgets/types";
+import { TwitchLiveWidget } from "./widgets/twitch-live-widget";
 
 export interface ProfileRenderData {
   username: string;
@@ -19,10 +21,12 @@ export function ProfileRender({
   profile,
   theme,
   preview = false,
+  widgetData = {},
 }: {
   profile: ProfileRenderData;
   theme: Theme;
   preview?: boolean;
+  widgetData?: Record<string, WidgetData | undefined>;
 }) {
   const name = profile.display_name ?? profile.username;
   const fontVar = fontVarFor(theme.font);
@@ -131,6 +135,23 @@ export function ProfileRender({
                     style={{ backgroundColor: theme.muted_color, opacity: 0.3 }}
                   />
                 );
+              case "widget": {
+                const wd = widgetData[block.id];
+                if (block.widget_kind === "twitch_live") {
+                  const channel = (block.meta as { channel?: string } | null)?.channel ?? block.title ?? "";
+                  const data = wd?.kind === "twitch_live" ? wd.data : null;
+                  return (
+                    <TwitchLiveWidget
+                      key={block.id}
+                      channel={channel}
+                      data={data}
+                      theme={theme}
+                      preview={preview}
+                    />
+                  );
+                }
+                return null;
+              }
               default:
                 return null;
             }

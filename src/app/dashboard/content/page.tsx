@@ -15,7 +15,7 @@ export default async function ContentPage() {
   const supabase = createAdminClient();
   const { data: blocks } = await supabase
     .from("blocks")
-    .select("id, type, title, url, content, visible")
+    .select("id, type, title, url, content, visible, widget_kind, meta")
     .eq("user_id", session.user.id)
     .order("position", { ascending: true });
 
@@ -32,7 +32,7 @@ export default async function ContentPage() {
           <CardHeader>
             <CardTitle>Your blocks</CardTitle>
             <CardDescription>
-              Mix links, text, headings, and dividers to build your page. Drag to reorder.
+              Mix links, text, headings, dividers, and live widgets to build your page. Drag to reorder.
             </CardDescription>
           </CardHeader>
           <CardContent>
