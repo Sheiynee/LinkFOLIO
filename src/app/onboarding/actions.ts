@@ -25,10 +25,9 @@ async function revalidateUserPages(userId: string) {
 }
 
 export async function applyOnboardingUrls({
-  archetype,
   urls,
 }: {
-  archetype: ArchetypeId;
+  archetype?: ArchetypeId;
   urls: Record<string, string>;
 }) {
   const session = await auth();

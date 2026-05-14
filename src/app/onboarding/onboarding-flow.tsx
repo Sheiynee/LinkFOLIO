@@ -235,7 +235,7 @@ function Step1Archetype({
       <div>
         <h1 className="text-2xl font-bold">What kind of creator are you?</h1>
         <p className="text-muted-foreground text-sm">
-          We'll suggest platforms and a starting style. You can change anything later.
+          We&apos;ll suggest platforms and a starting style. You can change anything later.
         </p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -310,7 +310,7 @@ function Step3Palette({
       <div>
         <h1 className="text-2xl font-bold">Pick a brand color</h1>
         <p className="text-muted-foreground text-sm">
-          We'll derive your background gradient, accents, and muted tones from this seed.
+          We&apos;ll derive your background gradient, accents, and muted tones from this seed.
         </p>
       </div>
 
