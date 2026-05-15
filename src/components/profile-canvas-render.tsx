@@ -98,9 +98,13 @@ export function ProfileCanvasRender({
       <div
         className="relative max-w-full"
         style={{ width: canvasWidth, height: canvasHeight }}
-        onClick={(e) => {
-          if (e.currentTarget === e.target) onSurfaceClick?.();
-        }}
+        {...(onSurfaceClick
+          ? {
+              onClick: (e: React.MouseEvent<HTMLDivElement>) => {
+                if (e.currentTarget === e.target) onSurfaceClick();
+              },
+            }
+          : {})}
       >
         {/* Header — avatar, name, bio. Sits at the top of the canvas. */}
         <div
