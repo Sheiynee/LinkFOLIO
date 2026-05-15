@@ -2,17 +2,14 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ProfileRender, type ProfileRenderData } from "@/components/profile-render";
+import { ProfileCanvasRender } from "@/components/profile-canvas-render";
 import { RevalidateOnFocus } from "@/components/revalidate-on-focus";
 import { normalizeTheme } from "@/lib/themes";
 import { collectUserFontIds } from "@/lib/typography";
 import { getUserFontsByIds } from "@/lib/user-fonts";
 import type { Block } from "@/lib/blocks";
-import type { WidgetData } from "@/lib/widgets/types";
-import { getTwitchLiveStatus, getTwitchLatestVod } from "@/lib/widgets/twitch";
-import { getYouTubeChannel, getYouTubeLatestVideo, getYouTubeLiveStatus } from "@/lib/widgets/youtube";
-import { getGitHubRepo, getGitHubUser } from "@/lib/widgets/github";
-import { getDiscordInvite } from "@/lib/widgets/discord";
-import { fetchOgCard } from "@/lib/widgets/og-scraper";
+import type { Element, LayoutMode } from "@/lib/elements";
+import { loadWidgetData } from "@/lib/widgets/load";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -23,15 +20,39 @@ interface Props {
   params: { username: string };
 }
 
-async function getProfile(username: string) {
+interface LoadedProfile {
+  id: string;
+  username: string;
+  display_name: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  theme: unknown;
+  layout_mode: LayoutMode;
+  blocks: Block[];
+  elements: Element[];
+}
+
+async function getProfile(username: string): Promise<LoadedProfile | null> {
   const supabase = createAdminClient();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, username, display_name, bio, avatar_url, theme")
+    .select("id, username, display_name, bio, avatar_url, theme, layout_mode")
     .eq("username", username.toLowerCase())
     .maybeSingle();
 
   if (!profile) return null;
+
+  const layout_mode = (profile.layout_mode as LayoutMode) ?? "stack";
+
+  if (layout_mode === "canvas") {
+    const { data: elements } = await supabase
+      .from("elements")
+      .select("id, type, title, url, content, visible, widget_kind, meta, x, y, w, h, rotation, z, locked")
+      .eq("user_id", profile.id)
+      .eq("visible", true)
+      .order("z", { ascending: true });
+    return { ...profile, layout_mode, blocks: [], elements: (elements ?? []) as Element[] };
+  }
 
   const { data: blocks } = await supabase
     .from("blocks")
@@ -39,81 +60,7 @@ async function getProfile(username: string) {
     .eq("user_id", profile.id)
     .eq("visible", true)
     .order("position", { ascending: true });
-
-  return { ...profile, blocks: (blocks ?? []) as Block[] };
-}
-
-async function loadWidgetData(blocks: Block[]): Promise<Record<string, WidgetData>> {
-  const widgetBlocks = blocks.filter((b) => b.type === "widget");
-  if (widgetBlocks.length === 0) return {};
-
-  const entries = await Promise.all(
-    widgetBlocks.map(async (block): Promise<[string, WidgetData] | null> => {
-      if (block.widget_kind === "twitch_live") {
-        const channel = (block.meta as { channel?: string } | null)?.channel;
-        if (!channel) return null;
-        const data = await getTwitchLiveStatus(channel);
-        return [block.id, { kind: "twitch_live", data }];
-      }
-      if (block.widget_kind === "twitch_vod") {
-        const channel = (block.meta as { channel?: string } | null)?.channel;
-        if (!channel) return null;
-        const data = await getTwitchLatestVod(channel);
-        return [block.id, { kind: "twitch_vod", data }];
-      }
-      if (block.widget_kind === "youtube_live") {
-        const meta = (block.meta ?? {}) as { channel_id?: string; handle?: string };
-        const data = await getYouTubeLiveStatus(meta);
-        return [block.id, { kind: "youtube_live", data }];
-      }
-      if (block.widget_kind === "og_card") {
-        const url = (block.meta as { url?: string } | null)?.url;
-        if (!url) return null;
-        const data = await fetchOgCard(url);
-        return [block.id, { kind: "og_card", data }];
-      }
-      if (block.widget_kind === "youtube_channel") {
-        const meta = (block.meta ?? {}) as { channel_id?: string; handle?: string };
-        const data = await getYouTubeChannel(meta);
-        return [block.id, { kind: "youtube_channel", data }];
-      }
-      if (block.widget_kind === "youtube_video") {
-        const meta = (block.meta ?? {}) as { video_id?: string; channel_id?: string; handle?: string };
-        const data = await getYouTubeLatestVideo(meta);
-        return [block.id, { kind: "youtube_video", data }];
-      }
-      if (block.widget_kind === "github_repo") {
-        const meta = (block.meta ?? {}) as { owner?: string; repo?: string };
-        if (!meta.owner || !meta.repo) return null;
-        const data = await getGitHubRepo(meta.owner, meta.repo);
-        return [block.id, { kind: "github_repo", data }];
-      }
-      if (block.widget_kind === "github_user") {
-        const meta = (block.meta ?? {}) as { username?: string };
-        if (!meta.username) return null;
-        const data = await getGitHubUser(meta.username);
-        return [block.id, { kind: "github_user", data }];
-      }
-      if (block.widget_kind === "discord_invite") {
-        const meta = (block.meta ?? {}) as { invite_code?: string };
-        if (!meta.invite_code) return null;
-        const data = await getDiscordInvite(meta.invite_code);
-        return [block.id, { kind: "discord_invite", data }];
-      }
-      if (block.widget_kind === "tip_jar") {
-        return [block.id, { kind: "tip_jar", data: null }];
-      }
-      if (block.widget_kind === "spotify_embed") {
-        return [block.id, { kind: "spotify_embed", data: null }];
-      }
-      if (block.widget_kind === "tiktok_video") {
-        return [block.id, { kind: "tiktok_video", data: null }];
-      }
-      return null;
-    })
-  );
-
-  return Object.fromEntries(entries.filter((e): e is [string, WidgetData] => e !== null));
+  return { ...profile, layout_mode, blocks: (blocks ?? []) as Block[], elements: [] };
 }
 
 async function trackPageView(profileId: string) {
@@ -161,12 +108,14 @@ export default async function PublicProfilePage({ params }: Props) {
   await trackPageView(profile.id);
 
   const theme = normalizeTheme(profile.theme);
-  const fontIds = collectUserFontIds(theme.typography, profile.blocks);
+  const carriers = profile.layout_mode === "canvas" ? profile.elements : profile.blocks;
+  const fontIds = collectUserFontIds(theme.typography, carriers);
   const [widgetData, userFonts] = await Promise.all([
-    loadWidgetData(profile.blocks),
+    loadWidgetData(carriers),
     getUserFontsByIds(fontIds),
   ]);
-  const data: ProfileRenderData = {
+
+  const renderData: ProfileRenderData = {
     username: profile.username,
     display_name: profile.display_name,
     bio: profile.bio,
@@ -174,13 +123,28 @@ export default async function PublicProfilePage({ params }: Props) {
     blocks: profile.blocks,
   };
 
-  const hasLiveWidget = profile.blocks.some(
+  const hasLiveWidget = carriers.some(
     (b) => b.widget_kind === "twitch_live" || b.widget_kind === "youtube_live"
   );
 
   return (
     <main className="min-h-screen">
-      <ProfileRender profile={data} theme={theme} widgetData={widgetData} userFonts={userFonts} />
+      {profile.layout_mode === "canvas" ? (
+        <ProfileCanvasRender
+          profile={renderData}
+          elements={profile.elements}
+          theme={theme}
+          widgetData={widgetData}
+          userFonts={userFonts}
+        />
+      ) : (
+        <ProfileRender
+          profile={renderData}
+          theme={theme}
+          widgetData={widgetData}
+          userFonts={userFonts}
+        />
+      )}
       {hasLiveWidget && <RevalidateOnFocus />}
     </main>
   );

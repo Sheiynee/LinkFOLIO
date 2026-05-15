@@ -168,48 +168,33 @@ theme.background.layers = [
 
 ## 🟣 Phase 4 — Canvas editor
 
-The stacked-column layout is the ceiling. Pages built with column layouts feel templated no matter how they're themed. To deliver the "genuinely different" pillar, the editor must give up the column.
+The stacked-column layout is the ceiling. Pages built with column layouts feel templated no matter how they're themed. To deliver the "genuinely different" pillar, the editor must give up the column. Shipped in three parts; canvas is opt-in via `profiles.layout_mode` so existing stacked pages stay untouched.
 
 ### Element model
-Replace ordered blocks with positioned elements:
-```
-elements(
-  id, profile_id, type, x, y, w, h,
-  rotation, z, locked, hidden,
-  meta jsonb,
-  mobile_x, mobile_y, mobile_w, mobile_h  // optional manual overrides
-)
-```
+Positioned elements live in a separate `elements` table that mirrors block content (type, title, url, content, widget_kind, meta, visible) plus position fields (`x`, `y`, `w`, `h`, `rotation`, `z`, `locked`) and reserved mobile overrides (`mobile_x`, `mobile_y`, `mobile_w`, `mobile_h`). Profiles set `layout_mode = 'stack' | 'canvas'` (default `stack`).
 
-### Phase 4a — Canvas MVP (3–4 weeks)
-- Drag, drop, resize handles, rotation handle
-- Snap-to-grid (invisible, configurable density)
-- Smart alignment guides when dragging near other elements
-- Selection model: click, shift-click multi-select, marquee select
-- Group operations: align, distribute, equalize spacing
-- Keyboard nudge (arrow = 1px, shift+arrow = 10px)
-- Undo/redo stack (mandatory — users will rage-quit without it)
-- Copy/paste within page
+### Phase 4 part 1 — Foundation (shipped)
+- Migration 11 adds the `elements` table + `profiles.layout_mode` flag + RLS (public read of visible elements, owner-only write).
+- Shared `loadWidgetData` helper consumed by both renderers — works on anything shaped `{ id, widget_kind, meta }`.
+- `ProfileCanvasRender` paints positioned elements over the layered background. Header (avatar + name + handle + bio) is fixed at the top of a 600px-wide canvas; below that everything is free-positioned. Canvas height auto-grows to the lowest element.
+- `/{username}` branches on `layout_mode` and serves the right renderer.
+- `/dashboard/canvas` editor: click-to-select, drag-to-move (window-level pointer listeners so fast drags don't strand the element), Delete/Backspace to remove, debounced server save per drag. Add-element panel supports text / heading / divider / link (title+URL) / widget (paste-any-URL with `detectWidgetFromUrl` + tip-jar fallback).
+- Dashboard "Layout" card: one-click "Try canvas mode" copies every existing block into a vertical-stack element layout so the page looks identical the moment canvas is on; one-click revert to stacked.
 
-### Phase 4b — Mobile reflow (1–2 weeks)
-- Auto-reflow algorithm: sort by y → stack vertically with proportional widths
-- Manual override mode: edit mobile separately when auto isn't right
-- Live preview toggle desktop ↔ mobile
+### Phase 4 part 2 — Editor polish (next)
+- Resize handles (8-way) + rotation handle.
+- Snap-to-grid (invisible, configurable density) + smart alignment guides when dragging near other elements.
+- Selection model: shift-click multi-select, marquee select.
+- Group operations: align (left/center/right/top/middle/bottom), distribute, equalize spacing.
+- Keyboard nudge (arrow = 1px, shift+arrow = 10px), copy/paste within page.
+- Undo/redo stack (mandatory — users will rage-quit without it).
+- Mobile reflow: auto-sort by y → stack vertically with proportional widths, with a manual override mode and a desktop↔mobile preview toggle.
 
-### Phase 4c — Element library expansion (2 weeks)
-Beyond text/image/widget, add:
-- Shapes (rect, circle, blob)
-- Visual dividers (lines, ornamental)
-- Sticker / decoration set
-- Image with crop/mask (circle, blob, polygon)
-- Button (replaces link block — same data, canvas-positioned)
-- Per-section background (regions of the canvas with their own background layers)
-
-### Phase 4d — Smart assist (2 weeks)
-- "Magic arrange" — heuristic that aligns selected elements and equalizes spacing
-- "Suggest layout" — given N elements, propose 3 arrangements (grid, asymmetric, hero-led)
-- AI copy assist for bio / headings (Claude API)
-- AI layout assist (optional, evaluate after MVP)
+### Phase 4 part 3 — Element library + smart assist
+- Shapes (rect, circle, blob), ornamental dividers, sticker set, image with crop/mask (circle, blob, polygon).
+- First-class Button element (replaces link block in canvas mode — same payload, canvas-positioned).
+- Per-section background (regions of the canvas with their own background layers).
+- "Magic arrange" heuristic + "Suggest layout" (3 arrangements: grid, asymmetric, hero-led). AI copy assist for bio/headings via Claude API. AI layout assist evaluated after the heuristic ships.
 
 ---
 
@@ -396,17 +381,18 @@ These come up often. Saying no is part of the strategy.
 | 08 | `08_typography_and_background_layers.sql` | Hard cutover: rewrites every `profiles.theme` row into `{ typography: {display,heading,body,ui,mono}, background: { layers: [...] } }`, drops legacy `font` / `bg_from` / `bg_to` |
 | 09 | `09_user_fonts.sql` | `public.user_fonts` table + `fonts` storage bucket, RLS, public read |
 | 10 | `10_onboarding_flag.sql` | `profiles.onboarded_at` for onboarding re-run protection (backfilled for users with existing blocks) |
+| 11 | `11_canvas_elements.sql` | `elements` table (positioned canvas elements with widget support, RLS, updated_at trigger) + `profiles.layout_mode` flag |
 
 ### Planned migrations
 
 | # | Purpose | Phase |
 |---|---|---|
-| 11 | `theme_background_layers`: image/video/animated layers + asset validation tables | 5 |
-| 12 | `elements`: new positioned-element table replacing `blocks` ordering for canvas | 4 |
-| 13 | `audit_log`, `user_storage`, rate-limit support tables | 5 |
-| 14 | `creator_live_status`: cached live state per creator with EventSub timestamps | 6 |
-| 15 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 |
-| 16 | `domains`: custom domain verification | 7 |
+| 12 | `theme_background_layers`: image/video/animated layers + asset validation tables | 5 |
+| 13 | `elements_mobile_overrides`: tighten mobile_* columns once Phase 4b auto-reflow lands | 4 |
+| 14 | `audit_log`, `user_storage`, rate-limit support tables | 5 |
+| 15 | `creator_live_status`: cached live state per creator with EventSub timestamps | 6 |
+| 16 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 |
+| 17 | `domains`: custom domain verification | 7 |
 
 Run migrations in order in Supabase SQL Editor. Each is idempotent.
 

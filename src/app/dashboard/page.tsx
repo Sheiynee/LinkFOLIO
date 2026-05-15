@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, Settings, Plus, Palette, Eye, MousePointerClick, Sparkles } from "lucide-react";
+import { ExternalLink, Settings, Plus, Palette, Eye, MousePointerClick, Sparkles, LayoutGrid } from "lucide-react";
+import { enableCanvasFromBlocks, setLayoutMode } from "./canvas/actions";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { Block } from "@/lib/blocks";
@@ -19,7 +20,7 @@ export default async function DashboardPage() {
   const supabase = createAdminClient();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, username, display_name, bio, avatar_url, theme")
+    .select("id, username, display_name, bio, avatar_url, theme, layout_mode")
     .eq("id", session.user.id)
     .single();
 
@@ -215,6 +216,53 @@ export default async function DashboardPage() {
             <Button variant="outline" size="sm" render={<Link href="/dashboard/theme" />}>
               <Palette className="h-4 w-4 mr-1" /> Customize
             </Button>
+          </CardHeader>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <LayoutGrid className="h-4 w-4" /> Layout
+                <Badge variant="secondary" className="ml-1 capitalize">
+                  {profile.layout_mode === "canvas" ? "Canvas" : "Stacked"}
+                </Badge>
+              </CardTitle>
+              <CardDescription>
+                {profile.layout_mode === "canvas"
+                  ? "Drag and position elements freely. Switch back to stacked if you prefer the column layout."
+                  : "Stacked column layout. Switch to canvas mode to position elements freely — your existing blocks will be copied over."}
+              </CardDescription>
+            </div>
+            {profile.layout_mode === "canvas" ? (
+              <div className="flex gap-2">
+                <Button size="sm" render={<Link href="/dashboard/canvas" />}>
+                  Open canvas
+                </Button>
+                <form
+                  action={async () => {
+                    "use server";
+                    await setLayoutMode("stack");
+                  }}
+                >
+                  <Button type="submit" variant="outline" size="sm">
+                    Use stacked
+                  </Button>
+                </form>
+              </div>
+            ) : (
+              <form
+                action={async () => {
+                  "use server";
+                  await enableCanvasFromBlocks();
+                  redirect("/dashboard/canvas");
+                }}
+              >
+                <Button type="submit" size="sm">
+                  Try canvas mode
+                </Button>
+              </form>
+            )}
           </CardHeader>
         </Card>
       </div>
