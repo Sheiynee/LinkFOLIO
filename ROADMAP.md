@@ -193,6 +193,11 @@ Positioned elements live in a separate `elements` table that mirrors block conte
 - **Copy / paste / duplicate** — in-memory clipboard (cross-tab paste deferred). Pasted elements are duplicated server-side and offset by 16px so they're visible above the originals.
 - **Mobile reflow** — public page auto-renders a mobile-reflowed canvas on `< sm` viewports (sorted by `y`, stacked at 360px wide). Editor has a Desktop ↔ Mobile preview toggle; dragging or resizing in mobile view writes `mobile_x/y/w/h` overrides instead of the desktop placement. Per-element "Reset to auto-reflow" button clears overrides.
 
+### Phase 4 part 2 follow-ups (not blocking part 3)
+- **Editor mobile responsiveness** — the right sidebar takes the full grid column width on `< lg` viewports, the toolbar clusters wrap awkwardly, and the canvas card competes with the sidebar for horizontal space. Needs a proper layout: collapsible sidebar (off-canvas drawer on `< md`), a touch-friendly handle size, and a viewport-aware canvas scale so the 600px desktop canvas isn't horizontally scrolled on phones. The on-page mobile **rendering** (public `/{username}` page) is fine — this is purely about the `/dashboard/canvas` editor UX on phones/tablets.
+- **Resize math on rotated elements** — handles operate in canvas-axis coordinates, so resizing a rotated element shows visible offset. Either rotate the resize math into element-local space or hide the resize handles while rotation ≠ 0.
+- **Cross-tab paste** — clipboard is in-memory only. Use `navigator.clipboard` with a JSON payload so paste works across tabs and after refresh.
+
 ### Phase 4 part 3 — Element library + smart assist
 - Shapes (rect, circle, blob), ornamental dividers, sticker set, image with crop/mask (circle, blob, polygon).
 - First-class Button element (replaces link block in canvas mode — same payload, canvas-positioned).

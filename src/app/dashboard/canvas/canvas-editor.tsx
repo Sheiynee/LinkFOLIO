@@ -83,6 +83,18 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
   useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
   useEffect(() => { viewRef.current = view; }, [view]);
 
+  /**
+   * Coordinate origin for pointer math. The outer canvasRef wraps the full
+   * left column (so we can attach a single pointerdown listener), but
+   * element x/y are relative to the inner 600px (or 360px in mobile view)
+   * centered canvas. Anchor on that via the data-canvas-root attribute so
+   * `e.clientX - rect.left` produces canvas-local coordinates.
+   */
+  const canvasRootRect = useCallback((): DOMRect | null => {
+    const root = canvasRef.current?.querySelector("[data-canvas-root]") as HTMLElement | null;
+    return root?.getBoundingClientRect() ?? null;
+  }, []);
+
   const history = useCanvasHistory(setElements);
 
   /** What placement the user sees & interacts with for an element. */
@@ -140,7 +152,7 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
   // ─── Gesture: pointerdown router ───────────────────────────
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     const target = e.target as HTMLElement;
-    const canvasRect = canvasRef.current?.getBoundingClientRect();
+    const canvasRect = canvasRootRect();
     if (!canvasRect) return;
     const px = e.clientX - canvasRect.left;
     const py = e.clientY - canvasRect.top;
@@ -234,7 +246,7 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
   // ─── Window-level pointermove/up while a gesture is active ──
   useEffect(() => {
     function localPoint(ev: PointerEvent) {
-      const r = canvasRef.current?.getBoundingClientRect();
+      const r = canvasRootRect();
       if (!r) return null;
       return { x: ev.clientX - r.left, y: ev.clientY - r.top };
     }
@@ -361,7 +373,7 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
     };
-  }, [history, patchLocal, queueSave]);
+  }, [history, patchLocal, queueSave, canvasRootRect]);
 
   // ─── Keyboard ─────────────────────────────────────────────
   useEffect(() => {

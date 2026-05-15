@@ -96,6 +96,7 @@ export function ProfileCanvasRender({
       <BackgroundLayers layers={theme.background.layers} />
 
       <div
+        data-canvas-root
         className="relative max-w-full"
         style={{ width: canvasWidth, height: canvasHeight }}
         {...(onSurfaceClick
