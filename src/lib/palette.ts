@@ -1,4 +1,4 @@
-import type { Theme } from "./themes";
+import type { Theme, ThemeBackground } from "./themes";
 
 interface HSL {
   h: number;
@@ -64,23 +64,31 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
 
-export function paletteFromSeed(seedHex: string): Pick<
-  Theme,
-  | "bg_from"
-  | "bg_to"
-  | "text_color"
-  | "muted_color"
-  | "accent_color"
-  | "button_bg"
-  | "button_text"
-  | "button_border"
-> {
+interface PaletteResult {
+  background: ThemeBackground;
+  text_color: Theme["text_color"];
+  muted_color: Theme["muted_color"];
+  accent_color: Theme["accent_color"];
+  button_bg: Theme["button_bg"];
+  button_text: Theme["button_text"];
+  button_border: Theme["button_border"];
+}
+
+export function paletteFromSeed(seedHex: string): PaletteResult {
   const rgb = hexToRgb(seedHex);
   if (!rgb) {
-    // Fallback to a neutral default.
     return {
-      bg_from: "#1e1b4b",
-      bg_to: "#0f172a",
+      background: {
+        layers: [{
+          id: crypto.randomUUID(),
+          type: "gradient",
+          angle: 135,
+          stops: [
+            { color: "#1e1b4b", position: 0 },
+            { color: "#0f172a", position: 100 },
+          ],
+        }],
+      },
       text_color: "#ffffff",
       muted_color: "#cbd5e1",
       accent_color: seedHex,
@@ -93,31 +101,31 @@ export function paletteFromSeed(seedHex: string): Pick<
   const seed = rgbToHsl(rgb);
   const isDarkSeed = seed.l < 50;
 
-  // Background: two stops near the seed, shifted darker (for light seeds) or
-  // keeping deep tones (for dark seeds).
   const bgFrom = hslToHex(adjust(seed, -8, -10, isDarkSeed ? -25 : -55));
   const bgTo = hslToHex(adjust(seed, 8, -15, isDarkSeed ? -40 : -65));
 
-  // Text on the background should be high-contrast.
   const text = "#ffffff";
   const muted = hslToHex(adjust(seed, 0, -30, 30));
 
-  // Accent: slight hue shift + boost saturation.
   const accent = hslToHex(adjust(seed, 12, 15, 5));
 
-  // Buttons: translucent on the gradient.
-  const buttonBg = "rgba(255,255,255,0.08)";
-  const buttonText = "#ffffff";
-  const buttonBorder = "rgba(255,255,255,0.18)";
-
   return {
-    bg_from: bgFrom,
-    bg_to: bgTo,
+    background: {
+      layers: [{
+        id: crypto.randomUUID(),
+        type: "gradient",
+        angle: 135,
+        stops: [
+          { color: bgFrom, position: 0 },
+          { color: bgTo, position: 100 },
+        ],
+      }],
+    },
     text_color: text,
     muted_color: muted,
     accent_color: accent,
-    button_bg: buttonBg,
-    button_text: buttonText,
-    button_border: buttonBorder,
+    button_bg: "rgba(255,255,255,0.08)",
+    button_text: "#ffffff",
+    button_border: "rgba(255,255,255,0.18)",
   };
 }

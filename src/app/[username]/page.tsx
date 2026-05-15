@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ProfileRender, type ProfileRenderData } from "@/components/profile-render";
 import { RevalidateOnFocus } from "@/components/revalidate-on-focus";
 import { normalizeTheme } from "@/lib/themes";
+import { collectUserFontIds } from "@/lib/typography";
+import { getUserFontsByIds } from "@/lib/user-fonts";
 import type { Block } from "@/lib/blocks";
 import type { WidgetData } from "@/lib/widgets/types";
 import { getTwitchLiveStatus, getTwitchLatestVod } from "@/lib/widgets/twitch";
@@ -159,7 +161,11 @@ export default async function PublicProfilePage({ params }: Props) {
   await trackPageView(profile.id);
 
   const theme = normalizeTheme(profile.theme);
-  const widgetData = await loadWidgetData(profile.blocks);
+  const fontIds = collectUserFontIds(theme.typography, profile.blocks);
+  const [widgetData, userFonts] = await Promise.all([
+    loadWidgetData(profile.blocks),
+    getUserFontsByIds(fontIds),
+  ]);
   const data: ProfileRenderData = {
     username: profile.username,
     display_name: profile.display_name,
@@ -174,7 +180,7 @@ export default async function PublicProfilePage({ params }: Props) {
 
   return (
     <main className="min-h-screen">
-      <ProfileRender profile={data} theme={theme} widgetData={widgetData} />
+      <ProfileRender profile={data} theme={theme} widgetData={widgetData} userFonts={userFonts} />
       {hasLiveWidget && <RevalidateOnFocus />}
     </main>
   );

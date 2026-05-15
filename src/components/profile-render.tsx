@@ -1,5 +1,4 @@
 import { ExternalLink } from "lucide-react";
-import { fontVarFor } from "@/lib/fonts";
 import {
   type Theme,
   buttonRadiusClass,
@@ -8,6 +7,14 @@ import {
 import type { Block } from "@/lib/blocks";
 import type { WidgetData, WidgetSize } from "@/lib/widgets/types";
 import { isWidgetSize } from "@/lib/widgets/types";
+import {
+  styleForRole,
+  readBlockTypographyOverride,
+  resolveElementTypography,
+  userFontFaceCss,
+  type UserFontRecord,
+} from "@/lib/typography";
+import { BackgroundLayers } from "./background-layers";
 import { TwitchLiveWidget } from "./widgets/twitch-live-widget";
 import { TwitchVodWidget } from "./widgets/twitch-vod-widget";
 import { YouTubeChannelWidget } from "./widgets/youtube-channel-widget";
@@ -36,39 +43,40 @@ export function ProfileRender({
   theme,
   preview = false,
   widgetData = {},
+  userFonts = [],
 }: {
   profile: ProfileRenderData;
   theme: Theme;
   preview?: boolean;
   widgetData?: Record<string, WidgetData | undefined>;
+  userFonts?: UserFontRecord[];
 }) {
   const name = profile.display_name ?? profile.username;
-  const fontVar = fontVarFor(theme.font);
   const radiusClass = buttonRadiusClass(theme.button_shape);
   const extraButtonStyle = buttonExtraStyle(theme.button_style);
 
-  const containerStyle: React.CSSProperties = {
-    background: theme.bg_image_url
-      ? `linear-gradient(to bottom right, ${theme.bg_from}cc, ${theme.bg_to}cc), url(${theme.bg_image_url})`
-      : `linear-gradient(to bottom right, ${theme.bg_from}, ${theme.bg_to})`,
-    backgroundSize: "cover",
-    backgroundPosition: "center",
-    color: theme.text_color,
-    fontFamily: fontVar,
-  };
+  const bodyStyle = styleForRole(theme.typography.body, userFonts);
+  const displayStyle = styleForRole(theme.typography.display, userFonts);
+  const monoStyle = styleForRole(theme.typography.mono, userFonts);
 
   const buttonStyle: React.CSSProperties = {
     backgroundColor: theme.button_bg,
     color: theme.button_text,
     borderColor: theme.button_border,
+    ...styleForRole(theme.typography.ui, userFonts),
     ...extraButtonStyle,
   };
 
+  const fontFaceCss = userFontFaceCss(userFonts);
+
   return (
     <div
-      className="min-h-screen w-full flex flex-col items-center py-16 px-4"
-      style={containerStyle}
+      className="relative min-h-screen w-full flex flex-col items-center py-16 px-4 isolate"
+      style={{ color: theme.text_color, ...bodyStyle }}
     >
+      {fontFaceCss && <style dangerouslySetInnerHTML={{ __html: fontFaceCss }} />}
+      <BackgroundLayers layers={theme.background.layers} />
+
       <div
         className="h-24 w-24 mb-4 rounded-full overflow-hidden ring-4"
         style={{ borderColor: theme.accent_color, boxShadow: `0 0 0 4px ${theme.accent_color}40` }}
@@ -86,8 +94,8 @@ export function ProfileRender({
         )}
       </div>
 
-      <h1 className="text-2xl font-bold mb-1">{name}</h1>
-      <p className="mb-4 text-sm font-mono" style={{ color: theme.muted_color }}>
+      <h1 className="text-2xl font-bold mb-1" style={displayStyle}>{name}</h1>
+      <p className="mb-4 text-sm" style={{ ...monoStyle, color: theme.muted_color }}>
         @{profile.username}
       </p>
 
@@ -104,6 +112,7 @@ export function ProfileRender({
           </p>
         ) : (
           profile.blocks.map((block) => {
+            const override = readBlockTypographyOverride(block.meta);
             switch (block.type) {
               case "link":
                 if (!block.url || !block.title) return null;
@@ -115,7 +124,10 @@ export function ProfileRender({
                     rel={preview ? undefined : "noopener noreferrer"}
                     onClick={preview ? (e) => e.preventDefault() : undefined}
                     className={`flex items-center justify-between w-full border px-5 py-3 transition hover:opacity-90 ${radiusClass}`}
-                    style={buttonStyle}
+                    style={{
+                      ...buttonStyle,
+                      ...resolveElementTypography(theme.typography, "ui", override, userFonts),
+                    }}
                   >
                     <span className="font-medium">{block.title}</span>
                     <ExternalLink className="h-4 w-4 opacity-60" />
@@ -126,7 +138,10 @@ export function ProfileRender({
                   <h2
                     key={block.id}
                     className="text-xl font-bold pt-4 pb-1 text-center"
-                    style={{ color: theme.text_color }}
+                    style={{
+                      color: theme.text_color,
+                      ...resolveElementTypography(theme.typography, "heading", override, userFonts),
+                    }}
                   >
                     {block.content}
                   </h2>
@@ -136,7 +151,10 @@ export function ProfileRender({
                   <p
                     key={block.id}
                     className="whitespace-pre-wrap text-center text-sm leading-relaxed py-2"
-                    style={{ color: theme.muted_color }}
+                    style={{
+                      color: theme.muted_color,
+                      ...resolveElementTypography(theme.typography, "body", override, userFonts),
+                    }}
                   >
                     {block.content}
                   </p>

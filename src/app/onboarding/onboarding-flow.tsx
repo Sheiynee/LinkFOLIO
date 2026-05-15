@@ -15,6 +15,8 @@ import {
   applyOnboardingUrls,
   applyPaletteFromSeed,
   applyTypePairing,
+  applySkipAllDefaults,
+  markOnboardingComplete,
 } from "./actions";
 
 type Step = 1 | 2 | 3 | 4;
@@ -26,6 +28,8 @@ export function OnboardingFlow() {
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [seedColor, setSeedColor] = useState<string>("#7c3aed");
   const [pairingId, setPairingId] = useState<string>("modernist");
+  // Track per-step skips so we can apply sensible defaults on finish.
+  const [skipped, setSkipped] = useState<Record<Step, boolean>>({ 1: false, 2: false, 3: false, 4: false });
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -44,7 +48,18 @@ export function OnboardingFlow() {
   }
 
   function finish() {
-    router.push("/dashboard");
+    // Best-effort flag write; ignore errors since the flow already saved
+    // everything that matters.
+    startTransition(async () => {
+      // If every step was skipped, fall back to archetype-only defaults.
+      const allSkipped = skipped[2] && skipped[3] && skipped[4];
+      if (allSkipped) {
+        await applySkipAllDefaults(archetype);
+      } else {
+        await markOnboardingComplete();
+      }
+      router.push("/dashboard");
+    });
   }
 
   function handleArchetypeNext() {
@@ -60,7 +75,8 @@ export function OnboardingFlow() {
 
   function handleUrlsNext(skip = false) {
     const hasAny = Object.values(urls).some((v) => v.trim().length > 0);
-    if (!skip && !hasAny) {
+    if (skip || !hasAny) {
+      setSkipped((s) => ({ ...s, 2: true }));
       next();
       return;
     }
@@ -69,12 +85,10 @@ export function OnboardingFlow() {
       return;
     }
     startTransition(async () => {
-      if (hasAny) {
-        const result = await applyOnboardingUrls({ archetype, urls });
-        if ("error" in result && result.error) {
-          setError(result.error);
-          return;
-        }
+      const result = await applyOnboardingUrls({ archetype, urls });
+      if ("error" in result && result.error) {
+        setError(result.error);
+        return;
       }
       next();
     });
@@ -82,6 +96,7 @@ export function OnboardingFlow() {
 
   function handlePaletteNext(skip = false) {
     if (skip) {
+      setSkipped((s) => ({ ...s, 3: true }));
       next();
       return;
     }
@@ -97,6 +112,7 @@ export function OnboardingFlow() {
 
   function handlePairingNext(skip = false) {
     if (skip) {
+      setSkipped((s) => ({ ...s, 4: true }));
       finish();
       return;
     }
@@ -400,7 +416,7 @@ function Step4Pairing({
             >
               <div
                 className="text-lg font-semibold mb-1"
-                style={{ fontFamily: fontVarFor(p.font) }}
+                style={{ fontFamily: fontVarFor(p.previewFont) }}
               >
                 {p.label}
               </div>

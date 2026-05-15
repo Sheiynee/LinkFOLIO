@@ -97,14 +97,35 @@ Target users, in order: Twitch streamers → YouTubers / video creators → musi
 - One paste-any-URL widget option resolves to the right widget kind + metadata
 - Detects: `twitch.tv/{user}`, `youtube.com/@handle`, `youtube.com/channel/UC…`, `youtube.com/watch?v=…`, `youtu.be/…`, `youtube.com/shorts/…`, `github.com/owner`, `github.com/owner/repo`, `discord.gg/x`, `open.spotify.com/{type}/{id}`, `spotify:` URIs, `tiktok.com/@user/video/…`, `ko-fi/buymeacoffee/patreon/streamlabs.com/x`, and any other valid http(s) URL as a generic OG card fallback
 
-### Onboarding archetype flow (Phase 2 shipped)
+### Onboarding archetype flow (Phase 2 shipped in full)
 Four-step flow at `/onboarding` delivers the 90-second-to-shareable-page promise:
 1. **Archetype picker** — Streamer · YouTuber · Musician · Podcaster · Visual Artist · Game Dev · Other. Each archetype declares a default theme preset and which platform inputs to surface in step 2.
-2. **Platform URL paste** — one input per archetype-relevant platform. Each non-empty URL runs through `detectWidgetFromUrl` and auto-creates the matching widget block.
-3. **Brand color seed** — 8 swatches + native color picker with live gradient preview. Backend derives bg gradient stops + accent + muted colors via HSL transforms in `lib/palette.ts`.
-4. **Typography pairing** — 12 curated pairings (`lib/type-pairings.ts`) → sets the page font. Examples: Editorial · Tech · Modernist · Soft · Serif Classic · Mono Forward · Display Wide · Handwritten · Brutalist · Magazine · Y2K · Playful.
+2. **Platform URL paste** — one input per archetype-relevant platform. Each non-empty URL runs through `detectWidgetFromUrl` and auto-creates the matching widget block. **Dedupes against existing widgets on re-run** (stable identity key per widget kind).
+3. **Brand color seed** — 8 swatches + native color picker with live gradient preview. Backend derives bg gradient layer + accent + muted colors via HSL transforms in `lib/palette.ts`.
+4. **Typography pairing** — 12 curated pairings (`lib/type-pairings.ts`) → sets all 5 typography roles. Examples: Editorial · Tech · Modernist · Soft · Serif Classic · Mono Forward · Display Wide · Handwritten · Brutalist · Magazine · Y2K · Playful.
 
 Each step is skippable; Back navigates without losing state. Dashboard surfaces a "Quick start" card for users with zero blocks.
+
+**Phase 2 polish (shipped):**
+- **Re-run protection** — `profiles.onboarded_at` flag set on finish; `/onboarding` shows a "you've already done this" guard with a "Re-run setup" escape hatch (`?rerun=1`). Step 2 also dedupes widgets against the user's existing set on every run.
+- **5-role typography pairings** — every pairing now populates `display`, `heading`, `body`, `ui`, `mono` roles via `pairing.roles: ThemeTypography`.
+- **Skip-all fallback** — `applySkipAllDefaults(archetype)` runs on finish if all post-archetype steps were skipped, so the dashboard never lands on a wholly default page.
+
+### Typography subsystem (Phase 3 shipped)
+- 5-role schema: `theme.typography = { display, heading, body, ui, mono }`. Each role: `{ family, source: 'google'|'curated'|'user_font', weight?, lineHeight?, letterSpacing? }`.
+- Per-role picker tiles in the theme editor (previews live in the actual font), reused across onboarding and dashboard.
+- **Custom font upload** — `fonts` storage bucket, `user_fonts(id, user_id, family_name, weight, style, url, storage_path, size_bytes, created_at)` table. WOFF2 only, magic-byte (`wOF2`) check, ≤1MB per file, 5MB total per user. Family name sanitized for safe CSS interpolation.
+- `@font-face` declarations injected into the public page on demand — only fonts actually referenced by the theme or per-element overrides get loaded.
+- **Per-element override** — blocks can carry `meta.typography?: Partial<TypographyRole>` and the renderer merges it over the role default (escape hatch for "this one heading uses a different font").
+- OG image route resolves typography roles best-effort (satori is system-font for now).
+
+### Backgrounds subsystem (Phase 3 shipped, image+animated layers deferred)
+- `theme.background = { layers: BgLayer[] }`. Layers stack in z-order. Each layer has `id` + optional `visible`.
+- **Gradient layer** — multi-stop (2–5), custom angle 0–360°. Editor lets you add/remove stops + drag positions.
+- **Mesh layer** — up to 4 absolutely-positioned radial blobs with shared blur. Each blob: `{ x, y, color, size, blur }`.
+- **Pattern layer** — 10 SVG patterns (dots, horizontal/diagonal lines, grid, grid paper, topographic, isometric, hexagons, checks, crosshatch) with color, scale, opacity.
+- Editor supports reorder, per-layer visibility toggle, per-layer preview chip, delete.
+- Image, video, and animated layers ship in Phase 5 (security hardening pass for asset uploads).
 
 ### Auto-generated OG images
 - `/api/og/[username]` runs on Node runtime via `next/og`; pulls avatar, display name, handle, bio, and brand palette into a themed 1200×630 share card
@@ -112,103 +133,36 @@ Each step is skippable; Back navigates without losing state. Dashboard surfaces 
 - `metadataBase` derived from `NEXT_PUBLIC_SITE_URL` or `VERCEL_PROJECT_PRODUCTION_URL` for absolute URLs
 
 ### Infrastructure
-- All SQL migrations in `supabase/*.sql` (01–07)
+- All SQL migrations in `supabase/*.sql` (01–10)
 - Server actions for every mutation
 - `revalidatePath` wired so dashboard + public page stay in sync
 - `.gitattributes` normalizes line endings to LF
 
 ---
 
-## 🚧 Phase 1 polish (remaining)
+## 🟠 Phase 3 follow-ups (deferred)
 
-Most of Phase 1 + the widget catalogue + freshness indicators + size variants shipped. What's left couples to a webhook subsystem.
+Phase 3 shipped typography (5 roles + custom font upload) and gradient/mesh/pattern background layers. Image and motion layers ride along with the Phase 5 security pass since they all need stricter asset validation:
 
-### Live-data freshness — phase 3 (webhook-driven)
-- **Twitch EventSub**: subscribe to `stream.online` / `stream.offline` events for known streamers. Webhook endpoint with HMAC signature verification, secret rotation, subscription management. Updates a `creator_live_status` table; pages read from it. Removes polling cost at scale.
-- **Smart polling**: only revalidate for creators whose pages were viewed in the last 5 minutes (`page_views`-derived hot set)
-- **Graceful degradation**: API down → show last known state with subtle "last seen" note. Needs the `creator_live_status` persistence table from EventSub.
-
-### Tier 2 widgets — deferred to Phase 6 (need OAuth or evolving APIs)
-Most need per-user OAuth + token refresh, which is meaningful infra. Defer until there's user demand:
-- Spotify "now playing"
-- Steam profile (recently played, achievements)
-- Last.fm scrobbles
-- Strava recent activities
-- Letterboxd recent reviews
-- Twitter/X embeds (when API stabilizes)
-- Kick live status (API still maturing)
-- Instagram latest post (API limitations)
-
----
-
-## 🟡 Phase 2 polish — Onboarding follow-ups
-
-The 4-step flow shipped, but a few quality-of-life items remain:
-- **Re-run protection** — flow currently appends widgets every time it runs (no `profiles.onboarded_at` flag). Add a flag + a "you've already done this" guard, or make step 2 dedupe against existing widgets.
-- **More than one font role** — current flow sets a single `theme.font`. The full typography subsystem (Phase 3) introduces 5 roles (display, heading, body, ui, mono); the pairing library will set all five once that lands.
-- **Skip-all confirmation** — if the user skips every step, the dashboard should still show something useful instead of an empty page.
-
----
-
-## 🟠 Phase 3 — Make it look genuinely different
-
-Visual depth is the moat against Linktree and the parity feature against Bento. Pages on LinkFolio should be unmistakably *not templates*.
-
-### Typography subsystem (replaces flat font picker)
-
-Schema change:
+### Backgrounds — deferred to Phase 5
 ```
-theme.typography = {
-  display: { family, weight, size, lineHeight, letterSpacing, source },
-  heading: { ... },
-  body:    { ... },
-  ui:      { ... },
-  mono:    { ... }
-}
-```
-`source` is one of: `'google' | 'curated' | 'user_font'`.
-
-#### Custom font upload
-- New `fonts` storage bucket (woff2 only, ≤1MB).
-- `user_fonts(user_id, family_name, weight, style, url, created_at)` table.
-- Magic-byte validation (`wOF2` signature).
-- Inject `@font-face` declarations in public page `<head>`.
-- Per-user storage cap.
-
-#### Per-role assignment
-Each role can reference a Google Font, a curated font, or a `user_fonts.id`.
-
-#### Per-element override
-On any canvas element, `meta.typography?: Partial<TypographyRole>` overrides the role default. The escape hatch — "this one heading uses a different font."
-
-### Backgrounds subsystem (replaces single-image background)
-
-Schema change:
-```
-theme.background = {
-  layers: [
-    { type: 'gradient', stops: [{color, position}], angle },
-    { type: 'mesh', blobs: [{x, y, color, size, blur}] },
+theme.background.layers = [
+  …,
+  { type: 'image', url, blur, opacity, blend, position },
+  { type: 'noise', intensity },
+  { type: 'video', url, poster }
+]
     { type: 'image', url, blur, opacity, blend, position },
     { type: 'pattern', kind: 'dots', color, scale, opacity },
     { type: 'noise', intensity },
-    { type: 'video', url, poster }   // Phase 5
+    { type: 'video', url, poster }
   ]
 }
 ```
-Layers stack in z-order. Each is independently editable, toggleable, reorderable.
-
-#### Ship in Phase 3
-- Multi-stop gradients (3–5 stops, custom angle)
-- Mesh gradients (2–3 absolutely-positioned blurred radial gradients)
-- Pattern library: dot grid, lines, grid paper, topographic, isometric, hexagons (~10 SVG patterns)
-- Image layer with blur, opacity, blend mode, color tint, position
-- Layered composition (image + gradient overlay + pattern simultaneously)
-
-#### Defer to Phase 5
-- Animated backgrounds (subtle drift, particle field, animated noise) with `prefers-reduced-motion` respect
-- Video backgrounds (mp4/webm loop, ≤10MB, muted autoplay, poster fallback)
-- Per-section backgrounds (requires canvas)
+- Image layer with blur/opacity/blend/tint (needs SSRF-safe upload pipeline).
+- Animated backgrounds (subtle drift, particle field, animated noise) with `prefers-reduced-motion` respect.
+- Video backgrounds (mp4/webm loop, ≤10MB, muted autoplay, poster fallback).
+- Per-section backgrounds (requires the canvas editor from Phase 4).
 
 ---
 
@@ -300,11 +254,22 @@ Deferred from Phase 3, ships here.
 
 ## 📈 Phase 6 — Growth & retention (post-launch)
 
-### Tier 2/3 widgets
+### Live-data freshness (webhook-driven) — moved from Phase 1
+- **Twitch EventSub**: subscribe to `stream.online` / `stream.offline` events for known streamers. Webhook endpoint with HMAC signature verification, secret rotation, subscription management. Updates a `creator_live_status` table; pages read from it. Removes polling cost at scale.
+- **Smart polling**: only revalidate for creators whose pages were viewed in the last 5 minutes (`page_views`-derived hot set).
+- **Graceful degradation**: API down → show last known state with subtle "last seen" note. Needs the `creator_live_status` persistence table from EventSub.
+- Unlocks the "live-now badge on OG images" item in Phase 5.
+
+### Tier 2/3 widgets (need OAuth or evolving APIs)
+Most need per-user OAuth + token refresh:
 - Spotify "now playing" (per-user OAuth + token refresh)
-- Steam profile, Last.fm, Strava, Letterboxd
-- Kick live status (when API matures)
+- Steam profile (recently played, achievements)
+- Last.fm scrobbles
+- Strava recent activities
+- Letterboxd recent reviews
 - Twitter/X embed (when API stabilizes)
+- Kick live status (when API matures)
+- Instagram latest post (API limitations)
 
 ### Creator analytics depth
 - `/dashboard/analytics` with charts (recharts)
@@ -428,19 +393,20 @@ These come up often. Saying no is part of the strategy.
 | 05 | `05_blocks.sql` | New `blocks` table replacing `links`, RLS, account-link trigger |
 | 06 | `06_analytics_and_visibility.sql` | `blocks.visible`, `block_clicks`, `page_views` policy + grants |
 | 07 | `07_widgets.sql` | `blocks.widget_kind` + `meta`; `app_tokens` for Twitch token cache |
+| 08 | `08_typography_and_background_layers.sql` | Hard cutover: rewrites every `profiles.theme` row into `{ typography: {display,heading,body,ui,mono}, background: { layers: [...] } }`, drops legacy `font` / `bg_from` / `bg_to` |
+| 09 | `09_user_fonts.sql` | `public.user_fonts` table + `fonts` storage bucket, RLS, public read |
+| 10 | `10_onboarding_flag.sql` | `profiles.onboarded_at` for onboarding re-run protection (backfilled for users with existing blocks) |
 
 ### Planned migrations
 
 | # | Purpose | Phase |
 |---|---|---|
-| 08 | `creator_live_status`: cached live state per creator with EventSub timestamps | 1 |
-| 09 | `theme_typography`: restructure `profiles.theme` into role-based typography | 3 |
-| 10 | `user_fonts`: per-user font uploads, `fonts` bucket | 3 |
-| 11 | `theme_background_layers`: layered background schema | 3 |
+| 11 | `theme_background_layers`: image/video/animated layers + asset validation tables | 5 |
 | 12 | `elements`: new positioned-element table replacing `blocks` ordering for canvas | 4 |
 | 13 | `audit_log`, `user_storage`, rate-limit support tables | 5 |
-| 14 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 |
-| 15 | `domains`: custom domain verification | 7 |
+| 14 | `creator_live_status`: cached live state per creator with EventSub timestamps | 6 |
+| 15 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 |
+| 16 | `domains`: custom domain verification | 7 |
 
 Run migrations in order in Supabase SQL Editor. Each is idempotent.
 

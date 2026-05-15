@@ -1,6 +1,7 @@
 import { ImageResponse } from "next/og";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { normalizeTheme } from "@/lib/themes";
+import { normalizeTheme, type Theme } from "@/lib/themes";
+import { gradientCss } from "@/lib/backgrounds";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,7 +68,7 @@ export async function GET(
             display: "flex",
             flexDirection: "column",
             padding: 80,
-            background: `linear-gradient(135deg, ${theme.bg_from}, ${theme.bg_to})`,
+            background: ogBackground(theme),
             color: theme.text_color,
             fontFamily: "system-ui, sans-serif",
           }}
@@ -200,6 +201,21 @@ export async function GET(
     console.error("[og] render failed:", err);
     return fallbackCard("LinkFolio");
   }
+}
+
+/**
+ * next/og's satori renderer supports only linear-gradient + solid colors as
+ * background, so OG cards collapse the layered background to its first
+ * gradient layer (or first color we can find).
+ */
+function ogBackground(theme: Theme): string {
+  for (const layer of theme.background.layers) {
+    if (layer.visible === false) continue;
+    if (layer.type === "gradient") return gradientCss(layer);
+    if (layer.type === "mesh" && layer.blobs[0]) return layer.blobs[0].color;
+    if (layer.type === "pattern") return layer.color;
+  }
+  return "#0f172a";
 }
 
 function truncate(s: string, n: number): string {

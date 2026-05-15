@@ -13,6 +13,7 @@ import { getYouTubeChannel, getYouTubeLatestVideo, getYouTubeLiveStatus } from "
 import { getGitHubRepo, getGitHubUser } from "@/lib/widgets/github";
 import { getDiscordInvite } from "@/lib/widgets/discord";
 import { fetchOgCard } from "@/lib/widgets/og-scraper";
+import { getUserFontsForUser } from "@/lib/user-fonts";
 
 async function loadPreviewWidgetData(blocks: Block[]): Promise<Record<string, WidgetData>> {
   const widgetBlocks = blocks.filter((b) => b.type === "widget");
@@ -75,7 +76,10 @@ export default async function ThemePage() {
     .order("position", { ascending: true });
 
   const theme = normalizeTheme(profile.theme);
-  const widgetData = await loadPreviewWidgetData((blocks ?? []) as Block[]);
+  const [widgetData, userFonts] = await Promise.all([
+    loadPreviewWidgetData((blocks ?? []) as Block[]),
+    getUserFontsForUser(session.user.id),
+  ]);
 
   return (
     <main className="min-h-screen bg-background">
@@ -102,6 +106,7 @@ export default async function ThemePage() {
             blocks: (blocks ?? []) as Block[],
           }}
           widgetData={widgetData}
+          initialUserFonts={userFonts}
         />
       </div>
     </main>
