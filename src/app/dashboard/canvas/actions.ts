@@ -7,6 +7,7 @@ import {
   CANVAS_WIDTH,
   MIN_ELEMENT_H,
   MIN_ELEMENT_W,
+  STACK_GAP_Y,
   STACK_INSET_TOP,
   stackLayoutForBlocks,
   type ElementType,
@@ -135,19 +136,19 @@ export async function createElement(input: CreateElementInput) {
   if (!session?.user?.id) return { error: "Not authenticated" };
 
   const supabase = createAdminClient();
-  const { data: maxRow } = await supabase
+  const { data: existing } = await supabase
     .from("elements")
-    .select("z")
-    .eq("user_id", session.user.id)
-    .order("z", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const z = (maxRow?.z ?? -1) + 1;
+    .select("z, y, h")
+    .eq("user_id", session.user.id);
+  const rows = existing ?? [];
+  const z = rows.reduce((acc, r) => Math.max(acc, r.z ?? -1), -1) + 1;
+  // Default y lands below every existing element, never inside the header.
+  const lowestBottom = rows.reduce((acc, r) => Math.max(acc, (r.y ?? 0) + (r.h ?? 0)), STACK_INSET_TOP - STACK_GAP_Y);
 
   const w = Math.max(MIN_ELEMENT_W, input.w ?? 320);
   const h = Math.max(MIN_ELEMENT_H, input.h ?? 56);
   const x = clamp(input.x ?? 24, 0, CANVAS_WIDTH - w);
-  const y = Math.max(0, input.y ?? 200);
+  const y = Math.max(STACK_INSET_TOP, input.y ?? lowestBottom + STACK_GAP_Y);
 
   const { data, error } = await supabase
     .from("elements")

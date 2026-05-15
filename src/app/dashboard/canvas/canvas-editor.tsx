@@ -6,7 +6,7 @@ import {
   Smartphone, Monitor, Undo2, Redo2, Copy,
   AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical,
-  StretchHorizontal, StretchVertical,
+  StretchHorizontal, StretchVertical, Keyboard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -620,6 +620,7 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
           </div>
         )}
 
+        <HelperBar selectionCount={selectedIds.size} view={view} />
         <CanvasToolbar
           view={view}
           onViewChange={setView}
@@ -673,10 +674,6 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
             </div>
           </div>
         </Card>
-        <p className="text-xs text-muted-foreground">
-          Drag to move · drag handles to resize · the small dot above the box rotates · shift-drag empty area to marquee-select.
-          Shortcuts: arrows nudge 1px (shift = 10px), {modKeyLabel()}+Z undo, {modKeyLabel()}+Shift+Z redo, {modKeyLabel()}+C/V copy/paste, {modKeyLabel()}+D duplicate, Delete to remove.
-        </p>
       </div>
 
       <SidePanel
@@ -689,6 +686,61 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
         onDuplicate={() => doDuplicate(Array.from(selectedIds))}
         onResetMobile={resetMobileForSelection}
       />
+    </div>
+  );
+}
+
+function HelperBar({ selectionCount, view }: { selectionCount: number; view: View }) {
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const mod = modKeyLabel();
+  const tip =
+    selectionCount === 0
+      ? view === "mobile"
+        ? "Mobile preview · drag the avatar/widgets to set mobile-specific positions, or use the Reset button to fall back to auto-reflow."
+        : "Click an element to select. Drag empty space to marquee-select. Add new elements from the right panel."
+      : selectionCount === 1
+        ? "Drag to move · drag the handles to resize · the small dot above the box rotates · arrow keys nudge (shift = 10px)."
+        : `${selectionCount} selected · use the align/distribute buttons or drag the group together.`;
+  return (
+    <Card className="px-3 py-2 flex items-center gap-3 text-xs text-muted-foreground">
+      <span className="flex-1">{tip}</span>
+      <button
+        type="button"
+        className="flex items-center gap-1 text-foreground hover:underline"
+        onClick={() => setShowShortcuts((s) => !s)}
+      >
+        <Keyboard className="h-3.5 w-3.5" /> Shortcuts
+      </button>
+      {showShortcuts && (
+        <div className="absolute right-6 mt-32 z-50 w-72 rounded-lg border bg-popover text-popover-foreground shadow-lg p-3 text-xs space-y-1.5">
+          <Shortcut keys={["←", "→", "↑", "↓"]} label="Nudge 1px" />
+          <Shortcut keys={["Shift", "+", "↑↓←→"]} label="Nudge 10px" />
+          <Shortcut keys={[mod, "+", "Z"]} label="Undo" />
+          <Shortcut keys={[mod, "+", "Shift", "+", "Z"]} label="Redo" />
+          <Shortcut keys={[mod, "+", "C"]} label="Copy" />
+          <Shortcut keys={[mod, "+", "V"]} label="Paste" />
+          <Shortcut keys={[mod, "+", "D"]} label="Duplicate" />
+          <Shortcut keys={[mod, "+", "A"]} label="Select all" />
+          <Shortcut keys={["Delete"]} label="Remove selection" />
+          <Shortcut keys={["Shift", "+", "click"]} label="Toggle in selection" />
+          <Shortcut keys={["Shift", "+", "drag rotate"]} label="Snap to 15°" />
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function Shortcut({ keys, label }: { keys: string[]; label: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span>{label}</span>
+      <span className="flex items-center gap-1">
+        {keys.map((k, i) => k === "+" ? (
+          <span key={i} className="text-muted-foreground">+</span>
+        ) : (
+          <kbd key={i} className="rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px]">{k}</kbd>
+        ))}
+      </span>
     </div>
   );
 }
@@ -717,45 +769,28 @@ function CanvasToolbar({
   const canDist = selectionCount >= 3;
   const canAlign = selectionCount >= 2;
   return (
-    <Card className="p-2 flex flex-wrap items-center gap-1">
-      <Button type="button" variant="ghost" size="icon" onClick={onUndo} disabled={!canUndo} title="Undo">
-        <Undo2 className="h-4 w-4" />
-      </Button>
-      <Button type="button" variant="ghost" size="icon" onClick={onRedo} disabled={!canRedo} title="Redo">
-        <Redo2 className="h-4 w-4" />
-      </Button>
-      <div className="w-px h-6 bg-border mx-1" />
-      <Button type="button" variant="ghost" size="icon" onClick={() => onGroupOp("align-l")} disabled={!canAlign} title="Align left">
-        <AlignStartHorizontal className="h-4 w-4" />
-      </Button>
-      <Button type="button" variant="ghost" size="icon" onClick={() => onGroupOp("align-c")} disabled={!canAlign} title="Align center (horizontal)">
-        <AlignCenterHorizontal className="h-4 w-4" />
-      </Button>
-      <Button type="button" variant="ghost" size="icon" onClick={() => onGroupOp("align-r")} disabled={!canAlign} title="Align right">
-        <AlignEndHorizontal className="h-4 w-4" />
-      </Button>
-      <div className="w-px h-6 bg-border mx-1" />
-      <Button type="button" variant="ghost" size="icon" onClick={() => onGroupOp("align-t")} disabled={!canAlign} title="Align top">
-        <AlignStartVertical className="h-4 w-4" />
-      </Button>
-      <Button type="button" variant="ghost" size="icon" onClick={() => onGroupOp("align-m")} disabled={!canAlign} title="Align middle (vertical)">
-        <AlignCenterVertical className="h-4 w-4" />
-      </Button>
-      <Button type="button" variant="ghost" size="icon" onClick={() => onGroupOp("align-b")} disabled={!canAlign} title="Align bottom">
-        <AlignEndVertical className="h-4 w-4" />
-      </Button>
-      <div className="w-px h-6 bg-border mx-1" />
-      <Button type="button" variant="ghost" size="icon" onClick={() => onGroupOp("dist-h")} disabled={!canDist} title="Distribute horizontally">
-        <StretchHorizontal className="h-4 w-4" />
-      </Button>
-      <Button type="button" variant="ghost" size="icon" onClick={() => onGroupOp("dist-v")} disabled={!canDist} title="Distribute vertically">
-        <StretchVertical className="h-4 w-4" />
-      </Button>
-      <div className="w-px h-6 bg-border mx-1" />
-      <Button type="button" variant="ghost" size="icon" onClick={onDuplicate} disabled={selectionCount === 0} title="Duplicate">
-        <Copy className="h-4 w-4" />
-      </Button>
-      <div className="ml-auto flex items-center gap-1">
+    <Card className="p-2 flex flex-wrap items-center gap-2">
+      <ToolGroup>
+        <ToolBtn onClick={onUndo} disabled={!canUndo} title="Undo"><Undo2 className="h-4 w-4" /></ToolBtn>
+        <ToolBtn onClick={onRedo} disabled={!canRedo} title="Redo"><Redo2 className="h-4 w-4" /></ToolBtn>
+      </ToolGroup>
+      <ToolGroup label="Align">
+        <ToolBtn onClick={() => onGroupOp("align-l")} disabled={!canAlign} title="Align left"><AlignStartHorizontal className="h-4 w-4" /></ToolBtn>
+        <ToolBtn onClick={() => onGroupOp("align-c")} disabled={!canAlign} title="Align horizontal center"><AlignCenterHorizontal className="h-4 w-4" /></ToolBtn>
+        <ToolBtn onClick={() => onGroupOp("align-r")} disabled={!canAlign} title="Align right"><AlignEndHorizontal className="h-4 w-4" /></ToolBtn>
+        <ToolBtn onClick={() => onGroupOp("align-t")} disabled={!canAlign} title="Align top"><AlignStartVertical className="h-4 w-4" /></ToolBtn>
+        <ToolBtn onClick={() => onGroupOp("align-m")} disabled={!canAlign} title="Align vertical middle"><AlignCenterVertical className="h-4 w-4" /></ToolBtn>
+        <ToolBtn onClick={() => onGroupOp("align-b")} disabled={!canAlign} title="Align bottom"><AlignEndVertical className="h-4 w-4" /></ToolBtn>
+      </ToolGroup>
+      <ToolGroup label="Distribute">
+        <ToolBtn onClick={() => onGroupOp("dist-h")} disabled={!canDist} title="Distribute horizontally"><StretchHorizontal className="h-4 w-4" /></ToolBtn>
+        <ToolBtn onClick={() => onGroupOp("dist-v")} disabled={!canDist} title="Distribute vertically"><StretchVertical className="h-4 w-4" /></ToolBtn>
+      </ToolGroup>
+      <ToolGroup>
+        <ToolBtn onClick={onDuplicate} disabled={selectionCount === 0} title="Duplicate"><Copy className="h-4 w-4" /></ToolBtn>
+      </ToolGroup>
+      <div className="flex-1" />
+      <div className="flex items-center gap-1">
         <Button
           type="button"
           variant={view === "desktop" ? "default" : "outline"}
@@ -774,6 +809,43 @@ function CanvasToolbar({
         </Button>
       </div>
     </Card>
+  );
+}
+
+function ToolGroup({ children, label }: { children: React.ReactNode; label?: string }) {
+  return (
+    <div className="flex items-center" title={label}>
+      {label && <span className="text-[10px] uppercase tracking-wide text-muted-foreground mr-1.5 hidden md:inline">{label}</span>}
+      <div className="flex items-center rounded-md border border-border/60 bg-muted/30 p-0.5 gap-0.5">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function ToolBtn({
+  onClick,
+  disabled,
+  title,
+  children,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className="h-7 w-7"
+    >
+      {children}
+    </Button>
   );
 }
 
