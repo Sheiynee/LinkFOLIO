@@ -83,7 +83,27 @@ export interface PatternLayer extends BgLayerBase {
   opacity: number;
 }
 
-export type BgLayer = GradientLayer | MeshLayer | PatternLayer;
+export type BackgroundSize = "cover" | "contain";
+export type BackgroundBlendMode =
+  | "normal"
+  | "multiply"
+  | "screen"
+  | "overlay"
+  | "soft-light"
+  | "luminosity";
+
+export interface ImageLayer extends BgLayerBase {
+  type: "image";
+  url: string;
+  /** 0–1 */
+  opacity: number;
+  /** px, 0–60 */
+  blur: number;
+  size: BackgroundSize;
+  blend: BackgroundBlendMode;
+}
+
+export type BgLayer = GradientLayer | MeshLayer | PatternLayer | ImageLayer;
 
 export interface ThemeBackground {
   layers: BgLayer[];
@@ -299,6 +319,22 @@ function normalizeBackground(raw: Partial<ThemeBackground> | undefined, legacy: 
       } else if ((l as BgLayer).type === "pattern") {
         const p = l as Partial<PatternLayer>;
         layers.push({ id, visible, type: "pattern", kind: (p.kind ?? "dots") as PatternKind, color: String(p.color ?? "#ffffff"), scale: Number(p.scale) || 24, opacity: Number(p.opacity) || 0.15 });
+      } else if ((l as BgLayer).type === "image") {
+        const im = l as Partial<ImageLayer>;
+        if (typeof im.url === "string" && im.url.length > 0) {
+          const size: BackgroundSize = im.size === "contain" ? "contain" : "cover";
+          const blend: BackgroundBlendMode = (["normal", "multiply", "screen", "overlay", "soft-light", "luminosity"] as BackgroundBlendMode[]).includes(im.blend as BackgroundBlendMode)
+            ? (im.blend as BackgroundBlendMode)
+            : "normal";
+          layers.push({
+            id, visible, type: "image",
+            url: im.url,
+            opacity: typeof im.opacity === "number" ? Math.max(0, Math.min(1, im.opacity)) : 1,
+            blur: typeof im.blur === "number" ? Math.max(0, Math.min(60, im.blur)) : 0,
+            size,
+            blend,
+          });
+        }
       }
     }
     if (layers.length > 0) return { layers };
@@ -368,4 +404,16 @@ export function newMeshLayer(): MeshLayer {
 
 export function newPatternLayer(kind: PatternKind = "dots"): PatternLayer {
   return { id: crypto.randomUUID(), type: "pattern", kind, color: "#ffffff", scale: 24, opacity: 0.12 };
+}
+
+export function newImageLayer(url: string): ImageLayer {
+  return {
+    id: crypto.randomUUID(),
+    type: "image",
+    url,
+    opacity: 1,
+    blur: 0,
+    size: "cover",
+    blend: "normal",
+  };
 }

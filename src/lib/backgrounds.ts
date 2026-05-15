@@ -1,6 +1,7 @@
 import type {
   BgLayer,
   GradientLayer,
+  ImageLayer,
   MeshLayer,
   PatternLayer,
   PatternKind,
@@ -142,12 +143,26 @@ export function patternLayerStyle(p: PatternLayer): React.CSSProperties {
   };
 }
 
+// ── Image ───────────────────────────────────────────────────
+export function imageLayerStyle(layer: ImageLayer): React.CSSProperties {
+  return {
+    backgroundImage: `url(${JSON.stringify(layer.url)})`,
+    backgroundSize: layer.size,
+    backgroundPosition: "center",
+    backgroundRepeat: "no-repeat",
+    opacity: Math.max(0, Math.min(1, layer.opacity)),
+    filter: layer.blur > 0 ? `blur(${Math.min(60, layer.blur)}px)` : undefined,
+    mixBlendMode: layer.blend !== "normal" ? layer.blend : undefined,
+  };
+}
+
 // ── Per-layer style dispatch ────────────────────────────────
 export function layerStyle(layer: BgLayer): React.CSSProperties {
   switch (layer.type) {
     case "gradient": return gradientLayerStyle(layer);
     case "mesh":     return meshLayerStyle(layer);
     case "pattern":  return patternLayerStyle(layer);
+    case "image":    return imageLayerStyle(layer);
   }
 }
 
@@ -157,5 +172,6 @@ export function layerLabel(layer: BgLayer): string {
     case "gradient": return `Gradient · ${layer.stops.length} stops`;
     case "mesh":     return `Mesh · ${layer.blobs.length} blobs`;
     case "pattern":  return `Pattern · ${PATTERNS[layer.kind]?.label ?? layer.kind}`;
+    case "image":    return "Image";
   }
 }

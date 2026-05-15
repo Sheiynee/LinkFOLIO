@@ -11,6 +11,8 @@ const MAX_FONT_BYTES = 1024 * 1024; // 1 MB per file (woff2)
 const USER_FONT_QUOTA_BYTES = 5 * 1024 * 1024; // 5 MB total per user
 const WOFF2_MAGIC = [0x77, 0x4f, 0x46, 0x32]; // "wOF2"
 
+const MAX_BG_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
+
 async function getUsernameForUser(userId: string): Promise<string | null> {
   const supabase = createAdminClient();
   const { data } = await supabase
@@ -104,6 +106,28 @@ export async function uploadUserFont(formData: FormData) {
 
   revalidatePath("/dashboard/theme");
   return { ok: true, font: inserted };
+}
+
+export async function uploadBackgroundImage(formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Not authenticated" };
+
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0) return { error: "No file selected" };
+  if (file.size > MAX_BG_IMAGE_BYTES) return { error: "Image must be under 5MB" };
+  if (!file.type.startsWith("image/")) return { error: "File must be an image or GIF" };
+
+  const supabase = createAdminClient();
+  const ext = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "") || "png";
+  const path = `${session.user.id}/bg-${Date.now()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("backgrounds")
+    .upload(path, file, { upsert: true, contentType: file.type });
+  if (uploadError) return { error: uploadError.message };
+
+  const { data: { publicUrl } } = supabase.storage.from("backgrounds").getPublicUrl(path);
+  return { ok: true, url: publicUrl };
 }
 
 export async function deleteUserFont(id: string) {

@@ -212,6 +212,7 @@ function ogBackground(theme: Theme): string {
   for (const layer of theme.background.layers) {
     if (layer.visible === false) continue;
     if (layer.type === "gradient") return gradientCss(layer);
+    if (layer.type === "image") return `url(${layer.url})`;
     if (layer.type === "mesh" && layer.blobs[0]) return layer.blobs[0].color;
     if (layer.type === "pattern") return layer.color;
   }

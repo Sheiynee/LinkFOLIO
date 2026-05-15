@@ -124,8 +124,9 @@ Each step is skippable; Back navigates without losing state. Dashboard surfaces 
 - **Gradient layer** — multi-stop (2–5), custom angle 0–360°. Editor lets you add/remove stops + drag positions.
 - **Mesh layer** — up to 4 absolutely-positioned radial blobs with shared blur. Each blob: `{ x, y, color, size, blur }`.
 - **Pattern layer** — 10 SVG patterns (dots, horizontal/diagonal lines, grid, grid paper, topographic, isometric, hexagons, checks, crosshatch) with color, scale, opacity.
+- **Image layer** — upload to the existing `backgrounds` bucket (≤5MB), then tune opacity, blur (0–60px), fit (cover/contain), and CSS `mix-blend-mode` (normal/multiply/screen/overlay/soft-light/luminosity) without re-uploading.
 - Editor supports reorder, per-layer visibility toggle, per-layer preview chip, delete.
-- Image, video, and animated layers ship in Phase 5 (security hardening pass for asset uploads).
+- Video + animated layers ship in Phase 5 (security hardening pass for asset uploads).
 
 ### Auto-generated OG images
 - `/api/og/[username]` runs on Node runtime via `next/og`; pulls avatar, display name, handle, bio, and brand palette into a themed 1200×630 share card
@@ -159,7 +160,6 @@ theme.background.layers = [
   ]
 }
 ```
-- Image layer with blur/opacity/blend/tint (needs SSRF-safe upload pipeline).
 - Animated backgrounds (subtle drift, particle field, animated noise) with `prefers-reduced-motion` respect.
 - Video backgrounds (mp4/webm loop, ≤10MB, muted autoplay, poster fallback).
 - Per-section backgrounds (requires the canvas editor from Phase 4).

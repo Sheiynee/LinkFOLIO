@@ -1,21 +1,27 @@
 "use client";
 
-import { GripVertical, Plus, Trash2, Eye, EyeOff, ChevronUp, ChevronDown } from "lucide-react";
+import { useRef, useTransition } from "react";
+import { GripVertical, Plus, Trash2, Eye, EyeOff, ChevronUp, ChevronDown, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
   type BgLayer,
   type GradientLayer,
+  type ImageLayer,
   type MeshLayer,
   type PatternLayer,
   type GradientStop,
+  type BackgroundBlendMode,
+  type BackgroundSize,
   type ThemeBackground,
   newGradientLayer,
+  newImageLayer,
   newMeshLayer,
   newPatternLayer,
 } from "@/lib/themes";
 import { PATTERN_LIST, layerLabel, layerStyle } from "@/lib/backgrounds";
+import { uploadBackgroundImage } from "./actions";
 
 interface Props {
   background: ThemeBackground;
@@ -33,6 +39,10 @@ export function BackgroundEditor({ background, onChange }: Props) {
     const layer: BgLayer =
       kind === "gradient" ? newGradientLayer() : kind === "mesh" ? newMeshLayer() : newPatternLayer();
     updateLayers([...layers, layer]);
+  }
+
+  function addImageLayer(url: string) {
+    updateLayers([...layers, newImageLayer(url)]);
   }
 
   function patchLayer(id: string, patch: Partial<BgLayer>) {
@@ -65,6 +75,7 @@ export function BackgroundEditor({ background, onChange }: Props) {
         <Button type="button" variant="outline" size="sm" onClick={() => addLayer("pattern")}>
           <Plus className="h-4 w-4 mr-1" /> Pattern
         </Button>
+        <ImageUploadButton onUploaded={addImageLayer} />
       </div>
 
       {layers.length === 0 && (
@@ -136,6 +147,12 @@ export function BackgroundEditor({ background, onChange }: Props) {
                 <PatternLayerForm
                   layer={layer}
                   onChange={(patch) => patchLayer(layer.id, patch as Partial<PatternLayer>)}
+                />
+              )}
+              {layer.type === "image" && (
+                <ImageLayerForm
+                  layer={layer}
+                  onChange={(patch) => patchLayer(layer.id, patch as Partial<ImageLayer>)}
                 />
               )}
             </div>
@@ -383,6 +400,128 @@ function PatternLayerForm({
             value={layer.opacity}
             onChange={(e) => onChange({ opacity: Number(e.target.value) })}
           />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ImageUploadButton({ onUploaded }: { onUploaded: (url: string) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [pending, startTransition] = useTransition();
+
+  function handle(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append("file", file);
+    startTransition(async () => {
+      const res = await uploadBackgroundImage(fd);
+      if (res.error) {
+        alert(res.error);
+        return;
+      }
+      if (res.url) onUploaded(res.url);
+    });
+    e.target.value = "";
+  }
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={pending}
+        onClick={() => inputRef.current?.click()}
+      >
+        <Upload className="h-4 w-4 mr-1" />
+        {pending ? "Uploading…" : "Image"}
+      </Button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*,image/gif"
+        className="hidden"
+        onChange={handle}
+      />
+    </>
+  );
+}
+
+function ImageLayerForm({
+  layer,
+  onChange,
+}: {
+  layer: ImageLayer;
+  onChange: (patch: Partial<ImageLayer>) => void;
+}) {
+  const blends: BackgroundBlendMode[] = ["normal", "multiply", "screen", "overlay", "soft-light", "luminosity"];
+  return (
+    <div className="space-y-3">
+      <div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={layer.url}
+          alt="Background"
+          className="w-full max-h-40 object-cover rounded border"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label className="text-sm">Opacity</Label>
+          <Input
+            type="number"
+            min={0}
+            max={1}
+            step={0.05}
+            value={layer.opacity}
+            onChange={(e) => onChange({ opacity: Number(e.target.value) })}
+          />
+        </div>
+        <div>
+          <Label className="text-sm">Blur (px)</Label>
+          <Input
+            type="number"
+            min={0}
+            max={60}
+            value={layer.blur}
+            onChange={(e) => onChange({ blur: Number(e.target.value) })}
+          />
+        </div>
+      </div>
+      <div>
+        <Label className="text-sm">Fit</Label>
+        <div className="flex gap-2 mt-1">
+          {(["cover", "contain"] as BackgroundSize[]).map((s) => (
+            <Button
+              key={s}
+              type="button"
+              variant={layer.size === s ? "default" : "outline"}
+              size="sm"
+              onClick={() => onChange({ size: s })}
+              className="capitalize"
+            >
+              {s}
+            </Button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <Label className="text-sm">Blend mode</Label>
+        <div className="flex flex-wrap gap-2 mt-1">
+          {blends.map((b) => (
+            <Button
+              key={b}
+              type="button"
+              variant={layer.blend === b ? "default" : "outline"}
+              size="sm"
+              onClick={() => onChange({ blend: b })}
+              className="capitalize"
+            >
+              {b}
+            </Button>
+          ))}
         </div>
       </div>
     </div>
