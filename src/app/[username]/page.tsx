@@ -130,13 +130,28 @@ export default async function PublicProfilePage({ params }: Props) {
   return (
     <main className="min-h-screen">
       {profile.layout_mode === "canvas" ? (
-        <ProfileCanvasRender
-          profile={renderData}
-          elements={profile.elements}
-          theme={theme}
-          widgetData={widgetData}
-          userFonts={userFonts}
-        />
+        <>
+          <div className="hidden sm:block">
+            <ProfileCanvasRender
+              profile={renderData}
+              elements={profile.elements}
+              theme={theme}
+              widgetData={widgetData}
+              userFonts={userFonts}
+              view="desktop"
+            />
+          </div>
+          <div className="block sm:hidden">
+            <ProfileCanvasRender
+              profile={renderData}
+              elements={profile.elements}
+              theme={theme}
+              widgetData={widgetData}
+              userFonts={userFonts}
+              view="mobile"
+            />
+          </div>
+        </>
       ) : (
         <ProfileRender
           profile={renderData}

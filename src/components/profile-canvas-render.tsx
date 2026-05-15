@@ -10,6 +10,7 @@ import {
   CANVAS_WIDTH,
   CANVAS_HEIGHT,
 } from "@/lib/elements";
+import { MOBILE_CANVAS_WIDTH, placementsForMobile } from "@/lib/canvas-mobile";
 import type { WidgetData, WidgetSize } from "@/lib/widgets/types";
 import { isWidgetSize } from "@/lib/widgets/types";
 import {
@@ -47,6 +48,8 @@ export interface ProfileCanvasRenderProps {
   overlay?: React.ReactNode;
   /** Called when the canvas surface (not an element) is clicked. */
   onSurfaceClick?: () => void;
+  /** Render the mobile-reflowed canvas instead of the desktop one. */
+  view?: "desktop" | "mobile";
 }
 
 export function ProfileCanvasRender({
@@ -58,6 +61,7 @@ export function ProfileCanvasRender({
   userFonts = [],
   overlay,
   onSurfaceClick,
+  view = "desktop",
 }: ProfileCanvasRenderProps) {
   const name = profile.display_name ?? profile.username;
 
@@ -67,8 +71,20 @@ export function ProfileCanvasRender({
 
   const fontFaceCss = userFontFaceCss(userFonts);
 
-  // Canvas grows past CANVAS_HEIGHT if elements extend below it.
-  const tallestY = elements.reduce((acc, e) => Math.max(acc, e.y + e.h), 0);
+  const isMobile = view === "mobile";
+  const canvasWidth = isMobile ? MOBILE_CANVAS_WIDTH : CANVAS_WIDTH;
+
+  // Compute the placement each element uses for this view.
+  const placements = isMobile ? placementsForMobile(elements) : null;
+  const placed = elements.map((e) => {
+    if (placements) {
+      const p = placements[e.id];
+      return { ...e, x: p.x, y: p.y, w: p.w, h: p.h, rotation: 0 };
+    }
+    return e;
+  });
+
+  const tallestY = placed.reduce((acc, e) => Math.max(acc, e.y + e.h), 0);
   const canvasHeight = Math.max(CANVAS_HEIGHT, tallestY + 80);
 
   return (
@@ -80,8 +96,8 @@ export function ProfileCanvasRender({
       <BackgroundLayers layers={theme.background.layers} />
 
       <div
-        className="relative"
-        style={{ width: CANVAS_WIDTH, height: canvasHeight }}
+        className="relative max-w-full"
+        style={{ width: canvasWidth, height: canvasHeight }}
         onClick={(e) => {
           if (e.currentTarget === e.target) onSurfaceClick?.();
         }}
@@ -119,7 +135,7 @@ export function ProfileCanvasRender({
         </div>
 
         {/* Positioned elements */}
-        {sortElementsForPaint(elements).map((el) => (
+        {sortElementsForPaint(placed).map((el) => (
           <ElementBox
             key={el.id}
             element={el}

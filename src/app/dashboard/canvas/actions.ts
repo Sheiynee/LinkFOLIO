@@ -262,6 +262,127 @@ export async function deleteElement(id: string) {
   return { ok: true };
 }
 
+export async function deleteElements(ids: string[]) {
+  if (ids.length === 0) return { ok: true };
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Not authenticated" };
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("elements")
+    .delete()
+    .in("id", ids)
+    .eq("user_id", session.user.id);
+  if (error) return { error: error.message };
+  await revalidateUserPages(session.user.id);
+  return { ok: true };
+}
+
+export interface BatchPatch {
+  id: string;
+  patch: ElementPatch;
+}
+
+/**
+ * Apply many patches in one round trip. Used by undo/redo (restoring a
+ * snapshot), group align/distribute, and multi-select drag. Each patch
+ * is independently RLS-checked by the per-id update — no service-role
+ * trust shortcut.
+ */
+export async function batchUpdateElements(updates: BatchPatch[]) {
+  if (updates.length === 0) return { ok: true };
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Not authenticated" };
+
+  const supabase = createAdminClient();
+  for (const u of updates) {
+    const clean: ElementPatch = { ...u.patch };
+    if (typeof clean.w === "number") clean.w = Math.max(MIN_ELEMENT_W, Math.round(clean.w));
+    if (typeof clean.h === "number") clean.h = Math.max(MIN_ELEMENT_H, Math.round(clean.h));
+    if (typeof clean.x === "number") clean.x = clamp(Math.round(clean.x), -CANVAS_WIDTH, CANVAS_WIDTH * 2);
+    if (typeof clean.y === "number") clean.y = Math.max(-200, Math.round(clean.y));
+    if (typeof clean.rotation === "number") clean.rotation = clamp(clean.rotation, -360, 360);
+    const { error } = await supabase
+      .from("elements")
+      .update(clean)
+      .eq("id", u.id)
+      .eq("user_id", session.user.id);
+    if (error) return { error: error.message };
+  }
+  await revalidateUserPages(session.user.id);
+  return { ok: true };
+}
+
+/** Duplicate elements server-side. Returns the newly-created rows. */
+export async function duplicateElements(ids: string[]) {
+  if (ids.length === 0) return { ok: true as const, elements: [] };
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Not authenticated" } as const;
+
+  const supabase = createAdminClient();
+  const { data: rows, error: lookupError } = await supabase
+    .from("elements")
+    .select("type, widget_kind, title, url, content, visible, meta, x, y, w, h, rotation, z, locked, mobile_x, mobile_y, mobile_w, mobile_h")
+    .in("id", ids)
+    .eq("user_id", session.user.id);
+  if (lookupError) return { error: lookupError.message } as const;
+  if (!rows || rows.length === 0) return { ok: true as const, elements: [] };
+
+  const { data: maxRow } = await supabase
+    .from("elements")
+    .select("z")
+    .eq("user_id", session.user.id)
+    .order("z", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  let nextZ = (maxRow?.z ?? -1) + 1;
+
+  const inserts = rows.map((r) => ({
+    user_id: session.user!.id,
+    ...r,
+    x: r.x + 16,
+    y: r.y + 16,
+    z: nextZ++,
+  }));
+  const { data: inserted, error: insertError } = await supabase
+    .from("elements")
+    .insert(inserts)
+    .select("id, type, widget_kind, title, url, content, visible, meta, x, y, w, h, rotation, z, locked, mobile_x, mobile_y, mobile_w, mobile_h");
+  if (insertError) return { error: insertError.message } as const;
+
+  await revalidateUserPages(session.user.id);
+  return { ok: true as const, elements: inserted ?? [] };
+}
+
+export interface MobilePatch {
+  id: string;
+  mobile_x?: number | null;
+  mobile_y?: number | null;
+  mobile_w?: number | null;
+  mobile_h?: number | null;
+}
+
+export async function updateMobilePlacements(patches: MobilePatch[]) {
+  if (patches.length === 0) return { ok: true };
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Not authenticated" };
+  const supabase = createAdminClient();
+  for (const p of patches) {
+    const { error } = await supabase
+      .from("elements")
+      .update({
+        mobile_x: p.mobile_x ?? null,
+        mobile_y: p.mobile_y ?? null,
+        mobile_w: p.mobile_w ?? null,
+        mobile_h: p.mobile_h ?? null,
+      })
+      .eq("id", p.id)
+      .eq("user_id", session.user.id);
+    if (error) return { error: error.message };
+  }
+  await revalidateUserPages(session.user.id);
+  return { ok: true };
+}
+
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }

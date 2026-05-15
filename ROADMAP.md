@@ -181,14 +181,17 @@ Positioned elements live in a separate `elements` table that mirrors block conte
 - `/dashboard/canvas` editor: click-to-select, drag-to-move (window-level pointer listeners so fast drags don't strand the element), Delete/Backspace to remove, debounced server save per drag. Add-element panel supports text / heading / divider / link (title+URL) / widget (paste-any-URL with `detectWidgetFromUrl` + tip-jar fallback).
 - Dashboard "Layout" card: one-click "Try canvas mode" copies every existing block into a vertical-stack element layout so the page looks identical the moment canvas is on; one-click revert to stacked.
 
-### Phase 4 part 2 — Editor polish (next)
-- Resize handles (8-way) + rotation handle.
-- Snap-to-grid (invisible, configurable density) + smart alignment guides when dragging near other elements.
-- Selection model: shift-click multi-select, marquee select.
-- Group operations: align (left/center/right/top/middle/bottom), distribute, equalize spacing.
-- Keyboard nudge (arrow = 1px, shift+arrow = 10px), copy/paste within page.
-- Undo/redo stack (mandatory — users will rage-quit without it).
-- Mobile reflow: auto-sort by y → stack vertically with proportional widths, with a manual override mode and a desktop↔mobile preview toggle.
+### Phase 4 part 2 — Editor polish (shipped)
+- **Resize handles** — 8-way (corners + edges) with min-size clamping; resize math runs in canvas-axis coordinates (rotated boxes resize with a visible offset for v1).
+- **Rotation handle** — atan2-based; hold shift to snap to 15° increments.
+- **Snap-to-grid** — 8px invisible grid. Drag and resize both snap; grid snaps yield only when no edge-snap engages.
+- **Alignment guides** — edges of the moving box (left/center/right + top/middle/bottom) snap to other elements' edges and the canvas centerline within a 6px threshold. Visible blue guide line renders for any active snap.
+- **Multi-select** — shift-click toggles in/out of the selection. Marquee select (drag empty surface) replaces selection; shift-drag empty surface adds to it. Resize and rotate are single-select only (multi-resize deferred); drag, align, distribute, duplicate, delete all work on the group.
+- **Group operations** — toolbar buttons for align left/center/right/top/middle/bottom (needs ≥2 selected) and distribute horizontal/vertical (needs ≥3). Commits with a single `batchUpdateElements` round trip.
+- **Keyboard** — arrows nudge 1px, shift+arrow 10px. ⌘/Ctrl+Z undo, ⌘/Ctrl+Shift+Z redo, ⌘/Ctrl+C copy, ⌘/Ctrl+V paste, ⌘/Ctrl+D duplicate, ⌘/Ctrl+A select-all, Delete/Backspace remove.
+- **Undo/redo** — 50-entry in-memory stack of element snapshots. Server sync uses `diffPlacements` to send only changed rows.
+- **Copy / paste / duplicate** — in-memory clipboard (cross-tab paste deferred). Pasted elements are duplicated server-side and offset by 16px so they're visible above the originals.
+- **Mobile reflow** — public page auto-renders a mobile-reflowed canvas on `< sm` viewports (sorted by `y`, stacked at 360px wide). Editor has a Desktop ↔ Mobile preview toggle; dragging or resizing in mobile view writes `mobile_x/y/w/h` overrides instead of the desktop placement. Per-element "Reset to auto-reflow" button clears overrides.
 
 ### Phase 4 part 3 — Element library + smart assist
 - Shapes (rect, circle, blob), ornamental dividers, sticker set, image with crop/mask (circle, blob, polygon).
