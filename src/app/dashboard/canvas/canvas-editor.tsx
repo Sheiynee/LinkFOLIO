@@ -611,81 +611,73 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
 
   // ─── Render ──────────────────────────────────────────────
   return (
-    <div className="grid lg:grid-cols-[minmax(0,1fr)_320px] gap-6">
-      <div className="space-y-3">
-        {error && (
-          <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive flex items-center justify-between">
-            <span>{error}</span>
-            <button className="ml-3 underline" onClick={() => setError(null)}>dismiss</button>
-          </div>
-        )}
+    <div className="space-y-3">
+      {error && (
+        <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive flex items-center justify-between">
+          <span>{error}</span>
+          <button className="ml-3 underline" onClick={() => setError(null)}>dismiss</button>
+        </div>
+      )}
 
-        <HelperBar selectionCount={selectedIds.size} view={view} />
-        <CanvasToolbar
-          view={view}
-          onViewChange={setView}
-          onUndo={doUndo}
-          onRedo={doRedo}
-          canUndo={history.canUndo()}
-          canRedo={history.canRedo()}
-          selectionCount={selectedIds.size}
-          onGroupOp={applyGroupOp}
-          onDuplicate={() => doDuplicate(Array.from(selectedIds))}
-        />
+      <HelperBar selectionCount={selectedIds.size} view={view} />
 
-        <Card className="overflow-hidden">
-          <div className="bg-muted px-4 py-2 text-xs font-mono text-muted-foreground border-b flex items-center justify-between">
-            <span>Preview · /{profile.username}</span>
-            <span className="text-[10px] uppercase tracking-wide">{view}</span>
-          </div>
-          <div
-            className="overflow-auto"
-            style={{ touchAction: "none" }}
-            onPointerDown={onPointerDown}
-          >
-            <div
-              ref={canvasRef}
-              className="relative flex justify-center min-h-[640px]"
-            >
-              <ProfileCanvasRender
-                profile={profile}
-                elements={elements}
-                theme={theme}
-                widgetData={widgetData}
-                userFonts={userFonts}
-                preview
-                view={view}
-                overlay={
-                  <>
-                    {selectionBox && (
-                      <SelectionOverlay
-                        box={selectionBox}
-                        rotation={singleSelected?.rotation ?? 0}
-                        showResize={selectedIds.size === 1}
-                        showRotate={selectedIds.size === 1 && view === "desktop"}
-                      />
-                    )}
-                    <SnapGuides guides={guides} height={canvasH} />
-                    <MarqueeBox box={marquee} />
-                  </>
-                }
-                onSurfaceClick={() => setSelectedIds(new Set())}
-              />
-            </div>
-          </div>
-        </Card>
-      </div>
+      <AddElementBar onAdded={pushAdded} onError={setError} />
 
-      <SidePanel
-        selectedIds={selectedIds}
-        selectedElement={singleSelected}
+      <CanvasToolbar
         view={view}
-        onAdded={pushAdded}
-        onError={setError}
-        onDelete={doDeleteSelection}
+        onViewChange={setView}
+        onUndo={doUndo}
+        onRedo={doRedo}
+        canUndo={history.canUndo()}
+        canRedo={history.canRedo()}
+        selectionCount={selectedIds.size}
+        onGroupOp={applyGroupOp}
         onDuplicate={() => doDuplicate(Array.from(selectedIds))}
+        onDelete={doDeleteSelection}
         onResetMobile={resetMobileForSelection}
       />
+
+      <Card className="overflow-hidden">
+        <div className="bg-muted px-4 py-2 text-xs font-mono text-muted-foreground border-b flex items-center justify-between">
+          <span>Preview · /{profile.username}</span>
+          <span className="text-[10px] uppercase tracking-wide">{view}</span>
+        </div>
+        <div
+          className="overflow-auto"
+          style={{ touchAction: "none" }}
+          onPointerDown={onPointerDown}
+        >
+          <div
+            ref={canvasRef}
+            className="relative flex justify-center min-h-[640px]"
+          >
+            <ProfileCanvasRender
+              profile={profile}
+              elements={elements}
+              theme={theme}
+              widgetData={widgetData}
+              userFonts={userFonts}
+              preview
+              view={view}
+              overlay={
+                <>
+                  {selectionBox && (
+                    <SelectionOverlay
+                      box={selectionBox}
+                      rotation={singleSelected?.rotation ?? 0}
+                      showResize={selectedIds.size === 1}
+                      showRotate={selectedIds.size === 1 && view === "desktop"}
+                    />
+                  )}
+                  <SnapGuides guides={guides} height={canvasH} />
+                  <MarqueeBox box={marquee} />
+                </>
+              }
+              onSurfaceClick={() => setSelectedIds(new Set())}
+            />
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }
@@ -696,23 +688,25 @@ function HelperBar({ selectionCount, view }: { selectionCount: number; view: Vie
   const tip =
     selectionCount === 0
       ? view === "mobile"
-        ? "Mobile preview · drag the avatar/widgets to set mobile-specific positions, or use the Reset button to fall back to auto-reflow."
-        : "Click an element to select. Drag empty space to marquee-select. Add new elements from the right panel."
+        ? "Mobile preview · drag a widget to set mobile-specific positions, or hit Reset (in the toolbar) to fall back to auto-reflow."
+        : "Click an element to select. Drag empty space to marquee-select. Use the toolbar below to add new elements."
       : selectionCount === 1
         ? "Drag to move · drag the handles to resize · the small dot above the box rotates · arrow keys nudge (shift = 10px)."
         : `${selectionCount} selected · use the align/distribute buttons or drag the group together.`;
   return (
-    <Card className="px-3 py-2 flex items-center gap-3 text-xs text-muted-foreground">
-      <span className="flex-1">{tip}</span>
-      <button
-        type="button"
-        className="flex items-center gap-1 text-foreground hover:underline"
-        onClick={() => setShowShortcuts((s) => !s)}
-      >
-        <Keyboard className="h-3.5 w-3.5" /> Shortcuts
-      </button>
+    <div className="relative">
+      <Card className="px-3 py-2 flex items-center gap-3 text-xs text-muted-foreground">
+        <span className="flex-1">{tip}</span>
+        <button
+          type="button"
+          className="flex items-center gap-1 text-foreground hover:underline"
+          onClick={() => setShowShortcuts((s) => !s)}
+        >
+          <Keyboard className="h-3.5 w-3.5" /> Shortcuts
+        </button>
+      </Card>
       {showShortcuts && (
-        <div className="absolute right-6 mt-32 z-50 w-72 rounded-lg border bg-popover text-popover-foreground shadow-lg p-3 text-xs space-y-1.5">
+        <div className="absolute right-0 top-full mt-1 z-50 w-72 rounded-lg border bg-popover text-popover-foreground shadow-lg p-3 text-xs space-y-1.5">
           <Shortcut keys={["←", "→", "↑", "↓"]} label="Nudge 1px" />
           <Shortcut keys={["Shift", "+", "↑↓←→"]} label="Nudge 10px" />
           <Shortcut keys={[mod, "+", "Z"]} label="Undo" />
@@ -726,7 +720,7 @@ function HelperBar({ selectionCount, view }: { selectionCount: number; view: Vie
           <Shortcut keys={["Shift", "+", "drag rotate"]} label="Snap to 15°" />
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -755,6 +749,8 @@ function CanvasToolbar({
   selectionCount,
   onGroupOp,
   onDuplicate,
+  onDelete,
+  onResetMobile,
 }: {
   view: View;
   onViewChange: (v: View) => void;
@@ -765,9 +761,12 @@ function CanvasToolbar({
   selectionCount: number;
   onGroupOp: (op: "align-l" | "align-c" | "align-r" | "align-t" | "align-m" | "align-b" | "dist-h" | "dist-v") => void;
   onDuplicate: () => void;
+  onDelete: () => void;
+  onResetMobile: () => void;
 }) {
   const canDist = selectionCount >= 3;
   const canAlign = selectionCount >= 2;
+  const hasSel = selectionCount > 0;
   return (
     <Card className="p-2 flex flex-wrap items-center gap-2">
       <ToolGroup>
@@ -786,8 +785,12 @@ function CanvasToolbar({
         <ToolBtn onClick={() => onGroupOp("dist-h")} disabled={!canDist} title="Distribute horizontally"><StretchHorizontal className="h-4 w-4" /></ToolBtn>
         <ToolBtn onClick={() => onGroupOp("dist-v")} disabled={!canDist} title="Distribute vertically"><StretchVertical className="h-4 w-4" /></ToolBtn>
       </ToolGroup>
-      <ToolGroup>
-        <ToolBtn onClick={onDuplicate} disabled={selectionCount === 0} title="Duplicate"><Copy className="h-4 w-4" /></ToolBtn>
+      <ToolGroup label="Selection">
+        <ToolBtn onClick={onDuplicate} disabled={!hasSel} title="Duplicate"><Copy className="h-4 w-4" /></ToolBtn>
+        {view === "mobile" && (
+          <ToolBtn onClick={onResetMobile} disabled={!hasSel} title="Reset to auto-reflow"><Smartphone className="h-4 w-4" /></ToolBtn>
+        )}
+        <ToolBtn onClick={onDelete} disabled={!hasSel} title="Delete"><Trash2 className="h-4 w-4 text-destructive" /></ToolBtn>
       </ToolGroup>
       <div className="flex-1" />
       <div className="flex items-center gap-1">
@@ -849,26 +852,16 @@ function ToolBtn({
   );
 }
 
-function SidePanel({
-  selectedIds,
-  selectedElement,
-  view,
+function AddElementBar({
   onAdded,
   onError,
-  onDelete,
-  onDuplicate,
-  onResetMobile,
 }: {
-  selectedIds: Set<string>;
-  selectedElement: Element | null;
-  view: View;
   onAdded: (el: Element) => void;
   onError: (msg: string) => void;
-  onDelete: () => void;
-  onDuplicate: () => void;
-  onResetMobile: () => void;
 }) {
   const [pending, startTransition] = useTransition();
+  // Which inline form is open. Only one at a time.
+  const [openForm, setOpenForm] = useState<null | "link" | "widget">(null);
   const [linkTitle, setLinkTitle] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [widgetUrl, setWidgetUrl] = useState("");
@@ -899,6 +892,7 @@ function SidePanel({
         onAdded(res.element as Element);
         setLinkTitle("");
         setLinkUrl("");
+        setOpenForm(null);
       }
     });
   }
@@ -915,71 +909,108 @@ function SidePanel({
       else if (res.element) {
         onAdded(res.element as Element);
         setWidgetUrl("");
+        setOpenForm(null);
       }
     });
   }
 
   return (
-    <Card className="p-4 space-y-4 self-start lg:sticky lg:top-4">
-      <div>
-        <p className="text-sm font-medium mb-2">Add element</p>
-        <div className="grid grid-cols-3 gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => add("text")} disabled={pending}>
-            <Type className="h-4 w-4 mr-1" /> Text
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => add("heading")} disabled={pending}>
-            <HeadingIcon className="h-4 w-4 mr-1" /> Heading
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => add("divider")} disabled={pending}>
-            <Minus className="h-4 w-4 mr-1" /> Divider
-          </Button>
+    <Card className="p-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground mr-1 hidden md:inline">Add</span>
+        <div className="flex items-center rounded-md border border-border/60 bg-muted/30 p-0.5 gap-0.5">
+          <AddBtn onClick={() => add("text")} disabled={pending} icon={<Type className="h-4 w-4" />} label="Text" />
+          <AddBtn onClick={() => add("heading")} disabled={pending} icon={<HeadingIcon className="h-4 w-4" />} label="Heading" />
+          <AddBtn onClick={() => add("divider")} disabled={pending} icon={<Minus className="h-4 w-4" />} label="Divider" />
+          <AddBtn
+            onClick={() => setOpenForm((f) => (f === "link" ? null : "link"))}
+            active={openForm === "link"}
+            disabled={pending}
+            icon={<Link2 className="h-4 w-4" />}
+            label="Link"
+          />
+          <AddBtn
+            onClick={() => setOpenForm((f) => (f === "widget" ? null : "widget"))}
+            active={openForm === "widget"}
+            disabled={pending}
+            icon={<Sparkles className="h-4 w-4" />}
+            label="Widget"
+          />
         </div>
       </div>
 
-      <div className="space-y-2 pt-2 border-t">
-        <p className="text-sm font-medium flex items-center gap-1.5"><Link2 className="h-3.5 w-3.5" /> Link button</p>
-        <Input placeholder="Title" value={linkTitle} onChange={(e) => setLinkTitle(e.target.value)} />
-        <Input placeholder="https://…" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} />
-        <Button type="button" size="sm" onClick={addLink} disabled={pending} className="w-full">
-          <Plus className="h-4 w-4 mr-1" /> Add link
-        </Button>
-      </div>
-
-      <div className="space-y-2 pt-2 border-t">
-        <p className="text-sm font-medium flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> Widget from URL</p>
-        <Input placeholder="twitch.tv/handle, youtube.com/…" value={widgetUrl} onChange={(e) => setWidgetUrl(e.target.value)} />
-        <Button type="button" size="sm" onClick={addWidget} disabled={pending} className="w-full">
-          <Plus className="h-4 w-4 mr-1" /> Add widget
-        </Button>
-      </div>
-
-      {selectedIds.size > 0 && (
-        <div className="pt-2 border-t space-y-2">
-          <p className="text-sm font-medium">
-            {selectedIds.size === 1 ? "Selected" : `${selectedIds.size} selected`}
-          </p>
-          {selectedElement && (
-            <div className="text-xs text-muted-foreground space-y-0.5">
-              <div>type · <span className="font-mono">{selectedElement.type}</span></div>
-              <div>x · {Math.round(view === "desktop" ? selectedElement.x : (selectedElement.mobile_x ?? 0))} · y · {Math.round(view === "desktop" ? selectedElement.y : (selectedElement.mobile_y ?? 0))}</div>
-              <div>{Math.round(view === "desktop" ? selectedElement.w : (selectedElement.mobile_w ?? selectedElement.w))} × {Math.round(view === "desktop" ? selectedElement.h : (selectedElement.mobile_h ?? selectedElement.h))}</div>
-              {selectedElement.rotation ? <div>rot · {Math.round(selectedElement.rotation)}°</div> : null}
-            </div>
-          )}
-          <Button type="button" variant="outline" size="sm" onClick={onDuplicate} className="w-full">
-            <Copy className="h-4 w-4 mr-1" /> Duplicate
+      {openForm === "link" && (
+        <div className="mt-2 pt-2 border-t flex flex-wrap items-center gap-2">
+          <Input
+            placeholder="Title"
+            value={linkTitle}
+            onChange={(e) => setLinkTitle(e.target.value)}
+            className="flex-1 min-w-[140px]"
+            autoFocus
+          />
+          <Input
+            placeholder="https://…"
+            value={linkUrl}
+            onChange={(e) => setLinkUrl(e.target.value)}
+            className="flex-[2] min-w-[200px]"
+            onKeyDown={(e) => { if (e.key === "Enter") addLink(); }}
+          />
+          <Button type="button" size="sm" onClick={addLink} disabled={pending}>
+            <Plus className="h-4 w-4 mr-1" /> Add
           </Button>
-          {view === "mobile" && (
-            <Button type="button" variant="outline" size="sm" onClick={onResetMobile} className="w-full">
-              Reset to auto-reflow
-            </Button>
-          )}
-          <Button type="button" variant="outline" size="sm" onClick={onDelete} className="w-full text-destructive hover:text-destructive">
-            <Trash2 className="h-4 w-4 mr-1" /> Delete
+          <Button type="button" variant="ghost" size="sm" onClick={() => setOpenForm(null)}>
+            Cancel
+          </Button>
+        </div>
+      )}
+
+      {openForm === "widget" && (
+        <div className="mt-2 pt-2 border-t flex flex-wrap items-center gap-2">
+          <Input
+            placeholder="twitch.tv/handle, youtube.com/…, github.com/owner/repo …"
+            value={widgetUrl}
+            onChange={(e) => setWidgetUrl(e.target.value)}
+            className="flex-1 min-w-[240px]"
+            autoFocus
+            onKeyDown={(e) => { if (e.key === "Enter") addWidget(); }}
+          />
+          <Button type="button" size="sm" onClick={addWidget} disabled={pending}>
+            <Plus className="h-4 w-4 mr-1" /> Add
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setOpenForm(null)}>
+            Cancel
           </Button>
         </div>
       )}
     </Card>
+  );
+}
+
+function AddBtn({
+  onClick,
+  disabled,
+  icon,
+  label,
+  active,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  icon: React.ReactNode;
+  label: string;
+  active?: boolean;
+}) {
+  return (
+    <Button
+      type="button"
+      variant={active ? "default" : "ghost"}
+      size="sm"
+      onClick={onClick}
+      disabled={disabled}
+      className="h-7 px-2"
+    >
+      {icon}
+      <span className="ml-1 hidden sm:inline">{label}</span>
+    </Button>
   );
 }
 
