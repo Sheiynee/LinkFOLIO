@@ -29,9 +29,15 @@ export const BLOCK_DESCRIPTIONS: Record<BlockType, string> = {
   widget: "A live block from another platform",
 };
 
+import { validateLinkUrl } from "./url-validate";
+
+/**
+ * Validate a user-supplied URL and return its normalized form, or `null`
+ * when the URL fails any of the safety checks in `validateLinkUrl`
+ * (disallowed scheme, localhost / private IP, etc.). Callers should treat
+ * `null` as "reject this input."
+ */
 export function normalizeUrl(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  if (/^(https?:|mailto:|tel:)/i.test(trimmed)) return trimmed;
-  return `https://${trimmed}`;
+  const result = validateLinkUrl(raw);
+  return result.ok ? result.url : null;
 }

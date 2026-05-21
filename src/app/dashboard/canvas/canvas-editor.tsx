@@ -978,9 +978,8 @@ function SidePanel({
       onError("Title and URL are required");
       return;
     }
-    const url = /^https?:/i.test(linkUrl.trim()) ? linkUrl.trim() : `https://${linkUrl.trim()}`;
     startTransition(async () => {
-      const res = await createElement({ type: "link", title: linkTitle.trim(), url, h: DEFAULT_ELEMENT_HEIGHTS.link });
+      const res = await createElement({ type: "link", title: linkTitle.trim(), url: linkUrl.trim(), h: DEFAULT_ELEMENT_HEIGHTS.link });
       if (res.error) onError(res.error);
       else if (res.element) {
         onAdded(res.element as Element);

@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rateLimit, RL_REDIRECT } from "@/lib/rate-limit";
 
+// Run at the edge — `/r/{id}` is the hottest path and benefits from
+// sub-100ms global redirects. Supabase JS v2 + the rate-limit lib both
+// rely on `fetch`, which is the edge runtime's native API.
+export const runtime = "edge";
+
 const BOT_REGEX = /bot|crawler|spider|crawling|preview|facebookexternalhit|whatsapp|slackbot|discordbot|twitterbot/i;
 
 function clientKey(request: NextRequest): string {

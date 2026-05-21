@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { type BlockType, normalizeUrl } from "@/lib/blocks";
+import { sanitizeMultilineText, sanitizeShortText } from "@/lib/sanitize";
 import type { WidgetKind, WidgetSize } from "@/lib/widgets/types";
 import { isWidgetSize } from "@/lib/widgets/types";
 import { parseTwitchChannel } from "@/lib/widgets/twitch";
@@ -44,13 +45,13 @@ export async function createBlock(input: CreateInput) {
   let content: string | null = null;
 
   if (input.type === "link") {
-    title = (input.title ?? "").trim();
+    title = sanitizeShortText(input.title ?? "");
     const rawUrl = (input.url ?? "").trim();
     if (!title || !rawUrl) return { error: "Title and URL are required" };
     url = normalizeUrl(rawUrl);
     if (!url) return { error: "Invalid URL" };
   } else if (input.type === "text" || input.type === "heading") {
-    content = (input.content ?? "").trim();
+    content = sanitizeMultilineText(input.content ?? "").trim();
     if (!content) return { error: "Content is required" };
   }
 
@@ -99,7 +100,7 @@ export async function updateBlock(input: UpdateInput) {
 
   const patch: Record<string, string | null> = {};
   if (existing.type === "link") {
-    const title = (input.title ?? "").trim();
+    const title = sanitizeShortText(input.title ?? "");
     const rawUrl = (input.url ?? "").trim();
     if (!title || !rawUrl) return { error: "Title and URL are required" };
     const url = normalizeUrl(rawUrl);
@@ -107,7 +108,7 @@ export async function updateBlock(input: UpdateInput) {
     patch.title = title;
     patch.url = url;
   } else if (existing.type === "text" || existing.type === "heading") {
-    const content = (input.content ?? "").trim();
+    const content = sanitizeMultilineText(input.content ?? "").trim();
     if (!content) return { error: "Content is required" };
     patch.content = content;
   }

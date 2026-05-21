@@ -30,6 +30,8 @@ import {
 import { validateImageFile } from "@/lib/image-magic";
 import { addStorageUsage, ensureStorageHeadroom } from "@/lib/storage-quota";
 import { rateLimit, RL_UPLOAD } from "@/lib/rate-limit";
+import { validateLinkUrl } from "@/lib/url-validate";
+import { sanitizeMultilineText, sanitizeShortText } from "@/lib/sanitize";
 
 async function getUsernameForUser(userId: string): Promise<string | null> {
   const supabase = createAdminClient();
@@ -147,6 +149,19 @@ export async function createElement(input: CreateElementInput) {
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated" };
 
+  // Validate user-supplied URLs server-side; the client can be bypassed.
+  let cleanUrl = input.url ?? null;
+  if (input.type === "link" && cleanUrl) {
+    const v = validateLinkUrl(cleanUrl);
+    if (!v.ok) return { error: v.reason };
+    cleanUrl = v.url;
+  }
+
+  // Sanitize text fields so a hostile client can't smuggle control chars
+  // or fullwidth lookalikes into stored content.
+  const cleanTitle = input.title ? sanitizeShortText(input.title) : null;
+  const cleanContent = input.content ? sanitizeMultilineText(input.content) : null;
+
   const supabase = createAdminClient();
   const { data: existing } = await supabase
     .from("elements")
@@ -168,9 +183,9 @@ export async function createElement(input: CreateElementInput) {
       user_id: session.user.id,
       type: input.type,
       widget_kind: input.widget_kind ?? null,
-      title: input.title ?? null,
-      url: input.url ?? null,
-      content: input.content ?? null,
+      title: cleanTitle,
+      url: cleanUrl,
+      content: cleanContent,
       meta: input.meta ?? null,
       x,
       y,
@@ -214,6 +229,11 @@ export async function updateElement(id: string, patch: ElementPatch) {
   if (typeof clean.x === "number") clean.x = clamp(Math.round(clean.x), -CANVAS_WIDTH, CANVAS_WIDTH * 2);
   if (typeof clean.y === "number") clean.y = Math.max(-200, Math.round(clean.y));
   if (typeof clean.rotation === "number") clean.rotation = clamp(clean.rotation, -360, 360);
+  if (typeof clean.url === "string" && clean.url.length > 0) {
+    const v = validateLinkUrl(clean.url);
+    if (!v.ok) return { error: v.reason };
+    clean.url = v.url;
+  }
 
   const supabase = createAdminClient();
   const { error } = await supabase

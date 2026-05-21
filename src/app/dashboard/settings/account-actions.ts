@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { subtractStorageUsage } from "@/lib/storage-quota";
+import { logAuditEvent } from "@/lib/audit-log";
 
 const GRACE_PERIOD_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
@@ -33,6 +34,11 @@ export async function softDeleteAccount() {
     .eq("id", session.user.id);
   if (error) return { error: error.message };
 
+  await logAuditEvent("account.soft_delete", {
+    userId: session.user.id,
+    detail: { grace_until: graceUntil.toISOString() },
+  });
+
   revalidatePath("/dashboard");
   return { ok: true, graceUntil: graceUntil.toISOString() };
 }
@@ -47,6 +53,8 @@ export async function cancelAccountDeletion() {
     .update({ deleted_at: null, deleted_grace_until: null })
     .eq("id", session.user.id);
   if (error) return { error: error.message };
+
+  await logAuditEvent("account.cancel_delete", { userId: session.user.id });
 
   revalidatePath("/dashboard");
   return { ok: true };
@@ -130,6 +138,8 @@ export async function exportUserData(): Promise<
   // block_clicks isn't keyed by user_id directly; filter by ownership.
   const ownedBlockIds = new Set((blocks ?? []).map((b) => b.id));
   const ownedClicks = (blockClicks ?? []).filter((c) => ownedBlockIds.has(c.block_id));
+
+  await logAuditEvent("account.export", { userId });
 
   return {
     ok: true,

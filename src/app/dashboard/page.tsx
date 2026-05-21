@@ -12,6 +12,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import type { Block } from "@/lib/blocks";
 import { BLOCK_LABELS } from "@/lib/blocks";
 import { OnboardingChecklist } from "./onboarding-checklist";
+import { ShareButton } from "@/components/share-button";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -25,6 +26,13 @@ export default async function DashboardPage() {
     .single();
 
   if (!profile) redirect("/auth/signin");
+
+  const siteBase =
+    process.env.NEXT_PUBLIC_SITE_URL ??
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : "http://localhost:3000");
+  const absolutePublicUrl = `${siteBase.replace(/\/$/, "")}/${profile.username}`;
 
   const [{ data: blocks }, viewsRes, clicksRes] = await Promise.all([
     supabase
@@ -69,6 +77,7 @@ export default async function DashboardPage() {
             <ExternalLink className="h-4 w-4" />
             View page
           </Link>
+          <ShareButton url={absolutePublicUrl} label={`@${profile.username} on LinkFolio`} />
           <ThemeToggle />
           <Avatar className="h-8 w-8">
             <AvatarImage src={profile.avatar_url ?? session.user.image ?? ""} />

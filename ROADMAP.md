@@ -235,25 +235,29 @@ All operational and compliance work that must land before public launch, regardl
 - **Magic-byte validation everywhere** — shared `lib/image-magic.ts` validates PNG/JPG/GIF/WebP signatures before upload; applied to avatar, background, and element-image paths (font uploads already had a WOFF2 check).
 - **Rate limiting (Postgres-backed)** — `rate_limit_buckets` table + `lib/rate-limit.ts` sliding-window limiter. Policies: `/r/{id}` redirects 60/min/IP, uploads 10/min/user, auth scope reserved for future use. Chose Postgres over Upstash to avoid a second SaaS dependency.
 
-### Security (still TODO)
-- CSRF tokens on every server action (NextAuth's session cookie helps but isn't sufficient).
-- URL allow/block list — deny `localhost`, RFC1918, `file:`, `javascript:`, `data:`, known malware patterns on every user-supplied link.
-- Input sanitization — strip control chars, NFKC normalize.
-- Audit log — security-relevant events with IP/UA (migration 16 placeholder).
+### Security (shipped — round 2)
+- **URL allow/block list** — `lib/url-validate.ts` rejects non-http(s)/mailto/tel schemes, localhost, all RFC1918 + CGNAT + link-local ranges, IPv6 ULA/loopback, and pre-parse `javascript:`/`data:`/`vbscript:`/`file:` prefixes. Wired into both `createBlock`/`updateBlock` (stack mode) and `createElement`/`updateElement` (canvas mode).
+- **Input sanitization** — `lib/sanitize.ts` runs NFKC normalize + strips C0/C1 control chars + zero-width + bidi-override on every text field (username, display name, bio, link title, content). Stops `ＡＤＭＩＮ` fullwidth lookalikes and RLO-based filename spoofing.
+- **Audit log** — `audit_log` table (migration 15) + `lib/audit-log.ts` helper logs auth, deletion, export, rate-limit hits, URL rejections, and reserved-username attempts. IPs are sha256-salted with `AUDIT_LOG_SALT`, never stored raw.
+- **CSRF** — Next.js 14 server actions already enforce same-origin via the framework's built-in `Origin` header check; no separate token machinery needed for the routes we ship.
+
+### Performance (shipped)
+- **Edge runtime** on `/r/{id}` — sub-100ms global redirects (`export const runtime = "edge"`).
+- **Preconnect + dns-prefetch** to the Supabase storage origin from the root layout so the first avatar/background fetch skips a TLS handshake.
+- **`next/image` enabled** for Supabase storage in [next.config.mjs](next.config.mjs) — public-bucket pattern allowlisted, third-party hosts blocked from the optimizer. Components can be migrated incrementally (avatar / element image are the biggest LCP wins).
+- **Materialized analytics views** — `mv_page_views_daily` + `mv_block_clicks_daily` (migration 16) with a `refresh_analytics_matviews()` SECURITY DEFINER function and a `*/5 * * * *` pg_cron schedule.
 
 ### Performance (still TODO)
-- `next/image` for avatars, backgrounds, image elements (currently `<img>` tags).
-- Edge runtime for `/r/{id}`.
-- Materialized views for analytics (`mv_block_clicks_daily`, `mv_page_views_daily`) refreshed every 5 min via `pg_cron`.
-- Preconnect to Supabase domain.
-- Static landing page (`force-static`).
+- Static landing page (`force-static`) — currently dynamic because it checks the session for the dashboard redirect.
 - Bundle analysis + lucide tree-shake audit.
 
+### Sharing & SEO (shipped)
+- **Web Share API + QR modal** — `<ShareButton>` on the dashboard uses `navigator.share` when available, falls back to a modal with a copy button and an inline QR code generated client-side ([lib/qr.ts](src/lib/qr.ts), no third-party deps).
+- **robots.txt** — auto-served via [src/app/robots.ts](src/app/robots.ts); public profiles crawlable, `/dashboard`, `/onboarding`, `/auth`, `/r/`, `/api/` blocked.
+- **sitemap.xml** — auto-served via [src/app/sitemap.ts](src/app/sitemap.ts); includes the landing page, legal pages, and every non-deleted profile (up to 10k).
+
 ### Sharing & SEO (still TODO)
-- **Live-now badge on OG images** — when a streamer is live at share time, the OG card reflects it. Requires Twitch EventSub from Phase 6.
-- QR code modal for the public URL.
-- Native Web Share API button.
-- Robots.txt + sitemap (opt-in).
+- **Live-now badge on OG images** — blocked on Phase 6 EventSub work.
 
 ### Animated + video backgrounds (shipped)
 - `BgLayer` union extended with `animated` (kind: drift · noise · particles) and `video` types. `lib/themes.ts` `normalizeBackground` handles both safely.
@@ -261,7 +265,7 @@ All operational and compliance work that must land before public launch, regardl
 - `<video>` layer is muted-autoplay-loop with `playsInline` and optional poster. Theme editor exposes both via picker buttons + per-layer inspectors.
 
 ### Compliance (shipped)
-- **Account deletion** — soft delete via `profiles.deleted_at` + `deleted_grace_until` (30-day grace). Page goes dark immediately (`/{username}` 404s deleted profiles); user can cancel from settings during the grace window. `hardDeleteAccount` server action wipes storage + rows when the grace expires (the periodic cleanup cron is a Phase 6 follow-up).
+- **Account deletion** — soft delete via `profiles.deleted_at` + `deleted_grace_until` (30-day grace). Page goes dark immediately (`/{username}` 404s deleted profiles); user can cancel from settings during the grace window. The daily Vercel Cron at [/api/cron/hard-delete-accounts](src/app/api/cron/hard-delete-accounts/route.ts) wipes storage + rows for profiles past the grace window (auth via `CRON_SECRET` header; schedule lives in [vercel.json](vercel.json)).
 - **Data export (GDPR)** — `exportUserData` action assembles profile + blocks + elements + user_fonts + page_views + block_clicks + storage row into a single JSON dump that the dashboard panel downloads client-side.
 - **Terms of Service** at [/legal/terms](src/app/legal/terms/page.tsx) — covers accounts, content licensing, third-party platforms, storage, deletion, no-warranty.
 - **Privacy Policy** at [/legal/privacy](src/app/legal/privacy/page.tsx) — covers what's collected (and what isn't), retention, third-party services, user rights, children.
@@ -416,16 +420,17 @@ These come up often. Saying no is part of the strategy.
 | 12 | `12_canvas_visual_elements.sql` | Widens `elements_type_check` with `'shape'`, `'sticker'`, `'image'` and re-asserts the widget_kind/type pairing rule for the new types |
 | 13 | `13_canvas_regions.sql` | Widens `elements_type_check` with `'region'` for per-section background regions |
 | 14 | `14_hardening.sql` | `reserved_usernames` seed, `user_storage` counter, `rate_limit_buckets`, `profiles.deleted_at` + `deleted_grace_until` |
+| 15 | `15_audit_log.sql` | Append-only `audit_log` (IP hashed with salt), service-role-only access |
+| 16 | `16_analytics_matviews.sql` | `mv_page_views_daily` + `mv_block_clicks_daily` matviews + `refresh_analytics_matviews()` + pg_cron 5-min schedule |
 
 ### Planned migrations
 
 | # | Purpose | Phase |
 |---|---|---|
-| 15 | `elements_mobile_overrides`: tighten mobile_* columns once Phase 4b auto-reflow lands | 4 |
-| 16 | `audit_log`: security-relevant events with IP/UA | 5 |
-| 17 | `creator_live_status`: cached live state per creator with EventSub timestamps | 6 |
-| 18 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 |
-| 19 | `domains`: custom domain verification | 7 |
+| 17 | `elements_mobile_overrides`: tighten mobile_* columns once Phase 4b auto-reflow lands | 4 |
+| 18 | `creator_live_status`: cached live state per creator with EventSub timestamps | 6 |
+| 19 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 |
+| 20 | `domains`: custom domain verification | 7 |
 
 Run migrations in order in Supabase SQL Editor. Each is idempotent.
 

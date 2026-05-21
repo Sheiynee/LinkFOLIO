@@ -7,6 +7,8 @@ import { isReservedUsername } from "@/lib/reserved-usernames";
 import { validateImageFile } from "@/lib/image-magic";
 import { addStorageUsage, ensureStorageHeadroom } from "@/lib/storage-quota";
 import { rateLimit, RL_UPLOAD } from "@/lib/rate-limit";
+import { sanitizeShortText, sanitizeMultilineText } from "@/lib/sanitize";
+import { logAuditEvent } from "@/lib/audit-log";
 
 export async function checkUsernameAvailable(username: string) {
   const session = await auth();
@@ -37,15 +39,19 @@ export async function updateProfile(formData: FormData) {
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated" };
 
-  const username = String(formData.get("username") ?? "").trim().toLowerCase();
-  const display_name = String(formData.get("display_name") ?? "").trim() || null;
-  const bio = String(formData.get("bio") ?? "").trim() || null;
+  const username = sanitizeShortText(String(formData.get("username") ?? "")).toLowerCase();
+  const display_name = sanitizeShortText(String(formData.get("display_name") ?? "")) || null;
+  const bio = sanitizeMultilineText(String(formData.get("bio") ?? "")).trim() || null;
 
   if (!/^[a-z0-9_-]{3,30}$/.test(username)) {
     return { error: "Username must be 3-30 chars: a-z, 0-9, _ or -" };
   }
 
   if (await isReservedUsername(username)) {
+    await logAuditEvent("username.reserved_attempt", {
+      userId: session.user.id,
+      detail: { attempted: username },
+    });
     return { error: "That username is reserved" };
   }
 
