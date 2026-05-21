@@ -22,10 +22,13 @@ import {
 } from "@/lib/typography";
 import { BackgroundLayers } from "./background-layers";
 import { StickerGlyph } from "./sticker-glyph";
+import { ButtonIconGlyph } from "./button-icon";
 import {
   blobPath,
   imageMaskClipPath,
+  readButtonMeta,
   readImageMeta,
+  readRegionMeta,
   readShapeMeta,
   readStickerMeta,
 } from "@/lib/visual-elements";
@@ -269,23 +272,36 @@ function ElementContent({
   }
   if (element.type === "link") {
     if (!element.url || !element.title) return null;
+    const btn = readButtonMeta(element.meta);
+    const variantStyle: React.CSSProperties = (() => {
+      switch (btn.variant) {
+        case "outline":
+          return { background: "transparent", borderColor: theme.accent_color, color: theme.text_color };
+        case "ghost":
+          return { background: "transparent", borderColor: "transparent", color: theme.text_color };
+        case "pill":
+          return { backgroundColor: theme.button_bg, color: theme.button_text, borderColor: theme.button_border, borderRadius: 9999 };
+        case "solid":
+        default:
+          return { backgroundColor: theme.button_bg, color: theme.button_text, borderColor: theme.button_border };
+      }
+    })();
     return (
       <a
         href={preview ? "#" : `/r/${element.id}`}
         target={preview ? undefined : "_blank"}
         rel={preview ? undefined : "noopener noreferrer"}
         onClick={preview ? (e) => e.preventDefault() : undefined}
-        className={`w-full h-full flex items-center justify-between border px-5 transition hover:opacity-90 ${radiusClass}`}
+        className={`w-full h-full flex items-center justify-center gap-2 border px-5 transition hover:opacity-90 ${btn.variant === "pill" ? "" : radiusClass}`}
         style={{
-          backgroundColor: theme.button_bg,
-          color: theme.button_text,
-          borderColor: theme.button_border,
+          ...variantStyle,
           ...resolveElementTypography(theme.typography, "ui", override, userFonts),
           ...extraButtonStyle,
         }}
       >
+        {btn.icon && <ButtonIconGlyph icon={btn.icon} className="h-4 w-4 shrink-0" />}
         <span className="font-medium truncate">{element.title}</span>
-        <ExternalLink className="h-4 w-4 opacity-60 shrink-0" />
+        {!btn.icon && <ExternalLink className="h-4 w-4 opacity-60 shrink-0" />}
       </a>
     );
   }
@@ -308,7 +324,22 @@ function ElementContent({
   if (element.type === "image") {
     return <ImageElement element={element} />;
   }
+  if (element.type === "region") {
+    return <RegionElement element={element} />;
+  }
   return null;
+}
+
+function RegionElement({ element }: { element: Element }) {
+  const meta = readRegionMeta(element.meta);
+  return (
+    <div
+      className="relative w-full h-full overflow-hidden"
+      style={{ borderRadius: meta.radius }}
+    >
+      <BackgroundLayers layers={meta.layers} />
+    </div>
+  );
 }
 
 function ShapeElement({ element }: { element: Element }) {

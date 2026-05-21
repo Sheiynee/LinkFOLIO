@@ -21,6 +21,7 @@ export const DEFAULT_VISUAL_ELEMENT_SIZE: Record<VisualElementType, { w: number;
   shape: { w: 160, h: 160 },
   sticker: { w: 64, h: 64 },
   image: { w: 200, h: 200 },
+  region: { w: 520, h: 320 },
 };
 /** Vertical gap between stacked elements during block→element migration. */
 export const STACK_GAP_Y = 12;
@@ -29,13 +30,13 @@ export const STACK_INSET_X = 24;
 export const STACK_INSET_TOP = 220; // leave room for avatar + display name + bio
 
 /** Canvas-only visual primitives — no stack-mode equivalent. */
-export type VisualElementType = "shape" | "sticker" | "image";
+export type VisualElementType = "shape" | "sticker" | "image" | "region";
 export type ElementType = BlockType | VisualElementType;
 
-export const VISUAL_ELEMENT_TYPES: VisualElementType[] = ["shape", "sticker", "image"];
+export const VISUAL_ELEMENT_TYPES: VisualElementType[] = ["shape", "sticker", "image", "region"];
 
 export function isVisualElementType(t: string): t is VisualElementType {
-  return t === "shape" || t === "sticker" || t === "image";
+  return t === "shape" || t === "sticker" || t === "image" || t === "region";
 }
 
 export interface Element {

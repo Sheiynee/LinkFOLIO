@@ -207,10 +207,25 @@ Positioned elements live in a separate `elements` table that mirrors block conte
 - **Image element** — upload PNG/JPG/GIF/WebP (≤5MB) into the existing `backgrounds` bucket under `${userId}/element-images/`, with magic-byte validation (rejects renamed binaries). Mask presets: none · circle · rounded · blob · hexagon · triangle, implemented with CSS `clip-path`; `object-fit` cover/contain toggle.
 - All three types are inert by default (no clicks, no hover, no widget fetches), so they're pure visual layers above the page composition.
 
-**Remaining in part 3:**
-- First-class Button element (replaces link block in canvas mode — same payload, canvas-positioned).
-- Per-section background (regions of the canvas with their own background layers).
-- "Magic arrange" heuristic + "Suggest layout" (3 arrangements: grid, asymmetric, hero-led). AI copy assist for bio/headings via Claude API. AI layout assist evaluated after the heuristic ships.
+**First-class Button (shipped):**
+- The canvas `link` element renders as a true Button — per-instance `variant` (solid · outline · ghost · pill) and an optional lucide icon prefix from a curated 12-icon set (`ArrowRight`, `ExternalLink`, social glyphs, etc.). Outline/ghost variants drop the background, pill rounds the box independent of the theme's button-shape setting. Sidebar inspector lets the creator switch variant + icon in one click.
+- Sidebar section renamed from "Link button" to "Button" to match the rest of the canvas vocabulary.
+
+**Per-section backgrounds (shipped):**
+- New `region` element type backed by migration 13 (`13_canvas_regions.sql` widens `elements_type_check` to include `'region'`). Each region carries `meta = { layers: BgLayer[], radius }` — the same layer union the global theme background uses, scoped to a single canvas box.
+- Renderer reuses `BackgroundLayers` inside the region's clipped box, so gradient / mesh / pattern / image layers all work without new code. Default region drops in with a soft indigo→violet gradient.
+- Inspector exposes the two knobs creators actually reach for (gradient endpoints + corner radius); the full layer editor on `/dashboard/theme` handles deeper edits.
+
+**Magic arrange (shipped):**
+- `lib/magic-arrange.ts` exposes three pure heuristics — `arrangeGrid` (2-column grid), `arrangeAsymmetric` (alternating sides with golden-ratio widths), `arrangeHero` (hero-led: biggest element full-width, rest tiled below).
+- Sidebar "Arrange" cluster has three one-click buttons (Wand2 for grid, ASYM, HERO). Application uses the existing `batchUpdateElements` round trip with an undo snapshot — so Cmd+Z reverts a magic arrange.
+- Region elements are excluded from arrangement (they're backdrops, not flow content); element aspect ratios are preserved.
+
+**AI copy assist (shipped):**
+- `improveCopyForElement` server action (in [actions.ts](src/app/dashboard/canvas/actions.ts)) calls Claude Sonnet 4.6 via `@anthropic-ai/sdk` with an ephemeral-cached system prompt, dynamic-imported so the SDK never ships to the client and stays out of bundles for users who don't trigger it.
+- Five intents — improve · shorter · longer · punchier · friendlier — surface as a 2-column button cluster on selected `text` / `heading` elements. The selected element's content is rewritten in-place with an undo snapshot.
+- Gated on `ANTHROPIC_API_KEY`; when unset the action returns a friendly "needs ANTHROPIC_API_KEY" error instead of crashing. Constants + system prompt live in [lib/ai-copy.ts](src/lib/ai-copy.ts) so the `"use server"` actions file only exports async functions (Next.js requirement).
+- AI **layout** assist (per roadmap) stays deferred — the heuristic is shipping first; revisit AI layout after it lives in production for a while.
 
 ---
 
@@ -399,17 +414,18 @@ These come up often. Saying no is part of the strategy.
 | 10 | `10_onboarding_flag.sql` | `profiles.onboarded_at` for onboarding re-run protection (backfilled for users with existing blocks) |
 | 11 | `11_canvas_elements.sql` | `elements` table (positioned canvas elements with widget support, RLS, updated_at trigger) + `profiles.layout_mode` flag |
 | 12 | `12_canvas_visual_elements.sql` | Widens `elements_type_check` with `'shape'`, `'sticker'`, `'image'` and re-asserts the widget_kind/type pairing rule for the new types |
+| 13 | `13_canvas_regions.sql` | Widens `elements_type_check` with `'region'` for per-section background regions |
 
 ### Planned migrations
 
 | # | Purpose | Phase |
 |---|---|---|
-| 13 | `theme_background_layers`: image/video/animated layers + asset validation tables | 5 |
-| 14 | `elements_mobile_overrides`: tighten mobile_* columns once Phase 4b auto-reflow lands | 4 |
-| 15 | `audit_log`, `user_storage`, rate-limit support tables | 5 |
-| 16 | `creator_live_status`: cached live state per creator with EventSub timestamps | 6 |
-| 17 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 |
-| 18 | `domains`: custom domain verification | 7 |
+| 14 | `theme_background_layers`: image/video/animated layers + asset validation tables | 5 |
+| 15 | `elements_mobile_overrides`: tighten mobile_* columns once Phase 4b auto-reflow lands | 4 |
+| 16 | `audit_log`, `user_storage`, rate-limit support tables | 5 |
+| 17 | `creator_live_status`: cached live state per creator with EventSub timestamps | 6 |
+| 18 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 |
+| 19 | `domains`: custom domain verification | 7 |
 
 Run migrations in order in Supabase SQL Editor. Each is idempotent.
 

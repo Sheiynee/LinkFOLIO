@@ -1,8 +1,10 @@
+import type { BgLayer } from "./themes";
+
 /**
- * Per-type schemas for canvas-only visual elements (shape / sticker / image).
- * Their config lives in `elements.meta` (jsonb) — these helpers normalize what
- * came back from the DB into typed structures and expose the picker presets
- * the editor uses.
+ * Per-type schemas for canvas-only visual elements (shape / sticker / image /
+ * region). Their config lives in `elements.meta` (jsonb) — these helpers
+ * normalize what came back from the DB into typed structures and expose the
+ * picker presets the editor uses.
  */
 
 // ── Shapes ────────────────────────────────────────────────
@@ -94,6 +96,32 @@ function mulberry32(seed: number) {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+// ── Canvas buttons (link element styling) ────────────────
+export type ButtonVariant = "solid" | "outline" | "ghost" | "pill";
+export const BUTTON_VARIANTS: ButtonVariant[] = ["solid", "outline", "ghost", "pill"];
+
+/** Icons curated for prefixing canvas buttons. */
+export const BUTTON_ICONS = [
+  "ArrowRight", "ExternalLink", "Download", "Mail",
+  "Twitch", "Youtube", "Github", "Twitter",
+  "Music", "Heart", "Star", "Send",
+] as const;
+export type ButtonIcon = (typeof BUTTON_ICONS)[number];
+
+export interface ButtonMeta {
+  variant: ButtonVariant;
+  icon: ButtonIcon | null;
+}
+
+export function readButtonMeta(meta: Record<string, unknown> | null | undefined): ButtonMeta {
+  const m = meta ?? {};
+  const variant = BUTTON_VARIANTS.includes(m.variant as ButtonVariant)
+    ? (m.variant as ButtonVariant)
+    : "solid";
+  const icon = BUTTON_ICONS.includes(m.icon as ButtonIcon) ? (m.icon as ButtonIcon) : null;
+  return { variant, icon };
 }
 
 // ── Stickers ─────────────────────────────────────────────
@@ -188,6 +216,47 @@ export function imageMaskClipPath(mask: ImageMask, blobSeed = 1): string | null 
       return `polygon(${coords.join(", ")})`;
     }
   }
+}
+
+// ── Regions (per-section backgrounds) ────────────────────
+export interface RegionMeta {
+  layers: BgLayer[];
+  /** Border-radius in px applied to the region box. */
+  radius: number;
+}
+
+function newId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `bg-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function defaultRegionMeta(): RegionMeta {
+  return {
+    layers: [
+      {
+        id: newId(),
+        visible: true,
+        type: "gradient",
+        angle: 135,
+        stops: [
+          { color: "#6366f1", position: 0 },
+          { color: "#a855f7", position: 100 },
+        ],
+      },
+    ],
+    radius: 24,
+  };
+}
+
+export function readRegionMeta(meta: Record<string, unknown> | null | undefined): RegionMeta {
+  const m = meta ?? {};
+  const layers = Array.isArray(m.layers) ? (m.layers as BgLayer[]) : [];
+  return {
+    layers,
+    radius: clamp(readNumber(m.radius) ?? 24, 0, 200),
+  };
 }
 
 // ── Utilities ────────────────────────────────────────────

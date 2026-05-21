@@ -8,6 +8,7 @@ import {
   AlignStartVertical, AlignCenterVertical, AlignEndVertical,
   StretchHorizontal, StretchVertical, Keyboard,
   Square, Circle, Triangle, Shapes, ImageIcon, Loader2,
+  Layers, Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -39,25 +40,35 @@ import { useCanvasHistory, diffPlacements } from "./canvas-history";
 import {
   batchUpdateElements,
   createElement,
+  createRegionElement,
   createShapeElement,
   createStickerElement,
   createWidgetElementFromUrl,
   deleteElement,
   deleteElements,
   duplicateElements,
+  improveCopyForElement,
   updateElement,
   updateMobilePlacements,
   uploadAndCreateImageElement,
 } from "./actions";
+import { COPY_INTENTS, type CopyIntent } from "@/lib/ai-copy";
 import {
+  BUTTON_ICONS,
+  BUTTON_VARIANTS,
   IMAGE_MASKS,
   STICKER_ICONS,
+  readButtonMeta,
   readImageMeta,
+  readRegionMeta,
   readShapeMeta,
   readStickerMeta,
+  type ButtonIcon,
   type ImageMask,
   type ShapeKind,
 } from "@/lib/visual-elements";
+import { ButtonIconGlyph } from "@/components/button-icon";
+import { arrange, type ArrangeKind } from "@/lib/magic-arrange";
 import { StickerGlyph } from "@/components/sticker-glyph";
 
 type View = "desktop" | "mobile";
@@ -663,6 +674,50 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
     });
   }
 
+  // ─── AI copy assist ───────────────────────────────────────
+  const [aiPending, setAiPending] = useState(false);
+  async function improveCopy(id: string, intent: CopyIntent) {
+    setAiPending(true);
+    history.push(elementsRef.current);
+    try {
+      const res = await improveCopyForElement(id, intent);
+      if (res.error) {
+        setError(res.error);
+        return;
+      }
+      const next = res.text;
+      if (!next) return;
+      setElements((es) =>
+        es.map((e) => {
+          if (e.id !== id) return e;
+          if (e.type === "heading") {
+            return e.title != null ? { ...e, title: next } : { ...e, content: next };
+          }
+          return { ...e, content: next };
+        })
+      );
+    } finally {
+      setAiPending(false);
+    }
+  }
+
+  // ─── Magic arrange ────────────────────────────────────────
+  function applyMagicArrange(kind: ArrangeKind) {
+    const patches = arrange(kind, elementsRef.current);
+    if (patches.length === 0) return;
+    history.push(elementsRef.current);
+    setElements((es) =>
+      es.map((e) => {
+        const p = patches.find((q) => q.id === e.id);
+        return p ? { ...e, x: p.x, y: p.y, w: p.w, h: p.h } : e;
+      })
+    );
+    startTransition(async () => {
+      const res = await batchUpdateElements(patches.map((p) => ({ id: p.id, patch: { x: p.x, y: p.y, w: p.w, h: p.h } })));
+      if (res.error) setError(res.error);
+    });
+  }
+
   // ─── Mobile placement helpers ─────────────────────────────
   function resetMobileForSelection() {
     const ids = Array.from(selectedIdsRef.current);
@@ -829,6 +884,9 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
             onAdded={pushAdded}
             onError={setError}
             onPatchMeta={patchMeta}
+            onMagicArrange={applyMagicArrange}
+            onImproveCopy={improveCopy}
+            aiPending={aiPending}
           />
         </div>
       </div>
@@ -909,6 +967,9 @@ function SidePanel({
   onAdded,
   onError,
   onPatchMeta,
+  onMagicArrange,
+  onImproveCopy,
+  aiPending,
 }: {
   selectedIds: Set<string>;
   selectedElement: Element | null;
@@ -925,6 +986,9 @@ function SidePanel({
   onAdded: (el: Element) => void;
   onError: (msg: string) => void;
   onPatchMeta: (id: string, patch: Record<string, unknown>) => void;
+  onMagicArrange: (kind: ArrangeKind) => void;
+  onImproveCopy: (id: string, intent: CopyIntent) => void;
+  aiPending: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [linkTitle, setLinkTitle] = useState("");
@@ -974,6 +1038,14 @@ function SidePanel({
         onAdded(res.element as Element);
         setWidgetUrl("");
       }
+    });
+  }
+
+  function addRegion() {
+    startTransition(async () => {
+      const res = await createRegionElement();
+      if (res.error) onError(res.error);
+      else if (res.element) onAdded(res.element as Element);
     });
   }
 
@@ -1041,6 +1113,29 @@ function SidePanel({
             )}
             <ToolBtn onClick={onDelete} disabled={!hasSel} title="Delete"><Trash2 className="h-4 w-4 text-destructive" /></ToolBtn>
           </ClusterRow>
+          <ClusterRow label="Arrange">
+            <ToolBtn onClick={() => onMagicArrange("grid")} title="Arrange as 2-column grid"><Wand2 className="h-4 w-4" /></ToolBtn>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => onMagicArrange("asymmetric")}
+              title="Asymmetric layout"
+              className="h-7 px-2 text-[10px]"
+            >
+              ASYM
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => onMagicArrange("hero")}
+              title="Hero-led layout"
+              className="h-7 px-2 text-[10px]"
+            >
+              HERO
+            </Button>
+          </ClusterRow>
           <ClusterRow label="View">
             <Button
               type="button"
@@ -1084,10 +1179,10 @@ function SidePanel({
 
       <div className="border-t" />
 
-      {/* ── Link button ── */}
+      {/* ── Button ── */}
       <div className="space-y-2">
-        <SectionHeader icon={<Link2 className="h-3.5 w-3.5" />}>Link button</SectionHeader>
-        <Input placeholder="Title" value={linkTitle} onChange={(e) => setLinkTitle(e.target.value)} />
+        <SectionHeader icon={<Link2 className="h-3.5 w-3.5" />}>Button</SectionHeader>
+        <Input placeholder="Label" value={linkTitle} onChange={(e) => setLinkTitle(e.target.value)} />
         <Input
           placeholder="https://…"
           value={linkUrl}
@@ -1095,7 +1190,7 @@ function SidePanel({
           onKeyDown={(e) => { if (e.key === "Enter") addLink(); }}
         />
         <Button type="button" size="sm" onClick={addLink} disabled={pending} className="w-full">
-          <Plus className="h-4 w-4 mr-1" /> Add link
+          <Plus className="h-4 w-4 mr-1" /> Add button
         </Button>
       </div>
 
@@ -1113,6 +1208,26 @@ function SidePanel({
         <Button type="button" size="sm" onClick={addWidget} disabled={pending} className="w-full">
           <Plus className="h-4 w-4 mr-1" /> Add widget
         </Button>
+      </div>
+
+      <div className="border-t" />
+
+      {/* ── Region ── */}
+      <div className="space-y-2">
+        <SectionHeader icon={<Layers className="h-3.5 w-3.5" />}>Background region</SectionHeader>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={addRegion}
+          disabled={pending}
+          className="w-full"
+        >
+          <Plus className="h-4 w-4 mr-1" /> Add region
+        </Button>
+        <p className="text-[10px] text-muted-foreground">
+          A box with its own background — useful for grouping a cluster of elements.
+        </p>
       </div>
 
       <div className="border-t" />
@@ -1212,6 +1327,9 @@ function SidePanel({
               </div>
             )}
 
+            {selectedElement?.type === "link" && (
+              <ButtonInspector element={selectedElement} onPatchMeta={onPatchMeta} />
+            )}
             {selectedElement?.type === "shape" && (
               <ShapeInspector element={selectedElement} onPatchMeta={onPatchMeta} />
             )}
@@ -1220,6 +1338,16 @@ function SidePanel({
             )}
             {selectedElement?.type === "image" && (
               <ImageInspector element={selectedElement} onPatchMeta={onPatchMeta} />
+            )}
+            {selectedElement?.type === "region" && (
+              <RegionInspector element={selectedElement} onPatchMeta={onPatchMeta} />
+            )}
+            {selectedElement && (selectedElement.type === "text" || selectedElement.type === "heading") && (
+              <AiCopyInspector
+                element={selectedElement}
+                pending={aiPending}
+                onImprove={onImproveCopy}
+              />
             )}
           </div>
         </>
@@ -1336,6 +1464,67 @@ function BlobIcon() {
   );
 }
 
+function ButtonInspector({
+  element,
+  onPatchMeta,
+}: {
+  element: Element;
+  onPatchMeta: (id: string, patch: Record<string, unknown>) => void;
+}) {
+  const meta = readButtonMeta(element.meta);
+  return (
+    <div className="space-y-2 rounded-md border p-2.5">
+      <div>
+        <span className="block text-xs text-muted-foreground mb-1">Variant</span>
+        <div className="grid grid-cols-4 gap-1">
+          {BUTTON_VARIANTS.map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => onPatchMeta(element.id, { variant: v })}
+              className={cn(
+                "rounded-md border px-2 py-1 text-[10px] capitalize",
+                meta.variant === v ? "bg-primary text-primary-foreground" : "bg-muted/30 hover:bg-muted"
+              )}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <span className="block text-xs text-muted-foreground mb-1">Icon</span>
+        <div className="grid grid-cols-6 gap-1">
+          <button
+            type="button"
+            onClick={() => onPatchMeta(element.id, { icon: null })}
+            className={cn(
+              "h-7 rounded-md border text-[10px]",
+              meta.icon === null ? "bg-primary text-primary-foreground" : "bg-muted/30 hover:bg-muted"
+            )}
+          >
+            none
+          </button>
+          {BUTTON_ICONS.map((icon: ButtonIcon) => (
+            <button
+              key={icon}
+              type="button"
+              onClick={() => onPatchMeta(element.id, { icon })}
+              title={icon}
+              className={cn(
+                "h-7 rounded-md border flex items-center justify-center",
+                meta.icon === icon ? "bg-primary text-primary-foreground" : "bg-muted/30 hover:bg-muted"
+              )}
+            >
+              <ButtonIconGlyph icon={icon} className="h-3.5 w-3.5" />
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ShapeInspector({
   element,
   onPatchMeta,
@@ -1391,6 +1580,98 @@ function StickerInspector({
           className="h-6 w-10 cursor-pointer rounded border bg-transparent"
         />
       </label>
+    </div>
+  );
+}
+
+function AiCopyInspector({
+  element,
+  pending,
+  onImprove,
+}: {
+  element: Element;
+  pending: boolean;
+  onImprove: (id: string, intent: CopyIntent) => void;
+}) {
+  return (
+    <div className="space-y-1.5 rounded-md border p-2.5">
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+        <Sparkles className="h-3.5 w-3.5" />
+        <span>AI copy assist</span>
+      </div>
+      <div className="grid grid-cols-2 gap-1">
+        {COPY_INTENTS.map((intent) => (
+          <Button
+            key={intent}
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onImprove(element.id, intent)}
+            disabled={pending}
+            className="h-7 text-[10px] capitalize"
+          >
+            {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : intent}
+          </Button>
+        ))}
+      </div>
+      <p className="text-[10px] text-muted-foreground">
+        Needs <code className="font-mono">ANTHROPIC_API_KEY</code> on the server.
+      </p>
+    </div>
+  );
+}
+
+function RegionInspector({
+  element,
+  onPatchMeta,
+}: {
+  element: Element;
+  onPatchMeta: (id: string, patch: Record<string, unknown>) => void;
+}) {
+  const meta = readRegionMeta(element.meta);
+  const firstGradient = meta.layers.find((l) => l.type === "gradient");
+  // The full layer editor lives on /dashboard/theme — here we expose only the
+  // two knobs creators reach for most: gradient endpoints + corner radius.
+  return (
+    <div className="space-y-2 rounded-md border p-2.5">
+      <label className="flex items-center justify-between gap-2 text-xs">
+        <span className="text-muted-foreground">Corner radius</span>
+        <input
+          type="range"
+          min={0}
+          max={120}
+          value={meta.radius}
+          onChange={(e) => onPatchMeta(element.id, { radius: Number(e.target.value) })}
+          className="flex-1 max-w-[120px]"
+        />
+      </label>
+      {firstGradient && firstGradient.type === "gradient" && firstGradient.stops.length >= 2 && (
+        <div className="space-y-1">
+          <span className="block text-xs text-muted-foreground">Gradient</span>
+          <div className="flex items-center gap-2">
+            {firstGradient.stops.slice(0, 2).map((stop, idx) => (
+              <input
+                key={idx}
+                type="color"
+                value={stop.color}
+                onChange={(e) => {
+                  const nextStops = firstGradient.stops.map((s, i) =>
+                    i === idx ? { ...s, color: e.target.value } : s
+                  );
+                  const nextLayers = meta.layers.map((l) =>
+                    l.id === firstGradient.id && l.type === "gradient" ? { ...l, stops: nextStops } : l
+                  );
+                  onPatchMeta(element.id, { layers: nextLayers });
+                }}
+                className="h-6 w-10 cursor-pointer rounded border bg-transparent"
+              />
+            ))}
+            <span className="text-[10px] text-muted-foreground">
+              Edit full layers in /dashboard/theme.
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
