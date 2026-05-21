@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
+  type AnimatedKind,
+  type AnimatedLayer,
   type BgLayer,
   type GradientLayer,
   type ImageLayer,
@@ -15,10 +17,13 @@ import {
   type BackgroundBlendMode,
   type BackgroundSize,
   type ThemeBackground,
+  type VideoLayer,
+  newAnimatedLayer,
   newGradientLayer,
   newImageLayer,
   newMeshLayer,
   newPatternLayer,
+  newVideoLayer,
 } from "@/lib/themes";
 import { PATTERN_LIST, layerLabel, layerStyle } from "@/lib/backgrounds";
 import { uploadBackgroundImage } from "./actions";
@@ -35,14 +40,21 @@ export function BackgroundEditor({ background, onChange }: Props) {
     onChange({ ...background, layers: next });
   }
 
-  function addLayer(kind: "gradient" | "mesh" | "pattern") {
+  function addLayer(kind: "gradient" | "mesh" | "pattern" | "animated") {
     const layer: BgLayer =
-      kind === "gradient" ? newGradientLayer() : kind === "mesh" ? newMeshLayer() : newPatternLayer();
+      kind === "gradient" ? newGradientLayer()
+        : kind === "mesh" ? newMeshLayer()
+        : kind === "pattern" ? newPatternLayer()
+        : newAnimatedLayer();
     updateLayers([...layers, layer]);
   }
 
   function addImageLayer(url: string) {
     updateLayers([...layers, newImageLayer(url)]);
+  }
+
+  function addVideoLayer(url: string) {
+    updateLayers([...layers, newVideoLayer(url)]);
   }
 
   function patchLayer(id: string, patch: Partial<BgLayer>) {
@@ -75,7 +87,11 @@ export function BackgroundEditor({ background, onChange }: Props) {
         <Button type="button" variant="outline" size="sm" onClick={() => addLayer("pattern")}>
           <Plus className="h-4 w-4 mr-1" /> Pattern
         </Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => addLayer("animated")}>
+          <Plus className="h-4 w-4 mr-1" /> Animated
+        </Button>
         <ImageUploadButton onUploaded={addImageLayer} />
+        <VideoUrlButton onAdd={addVideoLayer} />
       </div>
 
       {layers.length === 0 && (
@@ -153,6 +169,18 @@ export function BackgroundEditor({ background, onChange }: Props) {
                 <ImageLayerForm
                   layer={layer}
                   onChange={(patch) => patchLayer(layer.id, patch as Partial<ImageLayer>)}
+                />
+              )}
+              {layer.type === "animated" && (
+                <AnimatedLayerForm
+                  layer={layer}
+                  onChange={(patch) => patchLayer(layer.id, patch as Partial<AnimatedLayer>)}
+                />
+              )}
+              {layer.type === "video" && (
+                <VideoLayerForm
+                  layer={layer}
+                  onChange={(patch) => patchLayer(layer.id, patch as Partial<VideoLayer>)}
                 />
               )}
             </div>
@@ -525,6 +553,120 @@ function ImageLayerForm({
         </div>
       </div>
     </div>
+  );
+}
+
+const ANIMATED_KINDS: AnimatedKind[] = ["drift", "noise", "particles"];
+
+function AnimatedLayerForm({
+  layer,
+  onChange,
+}: {
+  layer: AnimatedLayer;
+  onChange: (patch: Partial<AnimatedLayer>) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Label className="text-sm w-16">Kind</Label>
+        <select
+          value={layer.kind}
+          onChange={(e) => onChange({ kind: e.target.value as AnimatedKind })}
+          className="rounded-md border bg-background px-2 py-1 text-sm"
+        >
+          {ANIMATED_KINDS.map((k) => (
+            <option key={k} value={k}>{k}</option>
+          ))}
+        </select>
+      </div>
+      <div className="flex items-center gap-2">
+        <Label className="text-sm w-16">Color</Label>
+        <input
+          type="color"
+          value={layer.color}
+          onChange={(e) => onChange({ color: e.target.value })}
+          className="h-8 w-12 cursor-pointer rounded border bg-transparent"
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <Label className="text-sm w-16">Intensity</Label>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={layer.intensity}
+          onChange={(e) => onChange({ intensity: Number(e.target.value) })}
+          className="flex-1"
+        />
+        <span className="text-xs text-muted-foreground w-8 text-right">
+          {Math.round(layer.intensity * 100)}%
+        </span>
+      </div>
+      <p className="text-[10px] text-muted-foreground">
+        Respects <code className="font-mono">prefers-reduced-motion</code> — visitors with motion
+        sensitivity see a still snapshot.
+      </p>
+    </div>
+  );
+}
+
+function VideoLayerForm({
+  layer,
+  onChange,
+}: {
+  layer: VideoLayer;
+  onChange: (patch: Partial<VideoLayer>) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Label className="text-sm w-16">URL</Label>
+        <Input
+          value={layer.url}
+          onChange={(e) => onChange({ url: e.target.value })}
+          placeholder="https://…/bg.mp4"
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <Label className="text-sm w-16">Poster</Label>
+        <Input
+          value={layer.poster ?? ""}
+          onChange={(e) => onChange({ poster: e.target.value || null })}
+          placeholder="(optional fallback image)"
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <Label className="text-sm w-16">Opacity</Label>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={layer.opacity}
+          onChange={(e) => onChange({ opacity: Number(e.target.value) })}
+          className="flex-1"
+        />
+        <span className="text-xs text-muted-foreground w-8 text-right">
+          {Math.round(layer.opacity * 100)}%
+        </span>
+      </div>
+      <p className="text-[10px] text-muted-foreground">
+        Muted autoplay only. mp4 / webm. Keep file size small — videos play on every page load.
+      </p>
+    </div>
+  );
+}
+
+function VideoUrlButton({ onAdd }: { onAdd: (url: string) => void }) {
+  function handle() {
+    const url = window.prompt("Paste a video URL (mp4 or webm):");
+    if (url && /^https?:\/\//i.test(url)) onAdd(url.trim());
+  }
+  return (
+    <Button type="button" variant="outline" size="sm" onClick={handle}>
+      <Plus className="h-4 w-4 mr-1" /> Video
+    </Button>
   );
 }
 

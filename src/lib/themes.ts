@@ -103,7 +103,33 @@ export interface ImageLayer extends BgLayerBase {
   blend: BackgroundBlendMode;
 }
 
-export type BgLayer = GradientLayer | MeshLayer | PatternLayer | ImageLayer;
+export type AnimatedKind = "drift" | "noise" | "particles";
+
+export interface AnimatedLayer extends BgLayerBase {
+  type: "animated";
+  kind: AnimatedKind;
+  /** 0–1 — the visual strength of the effect. */
+  intensity: number;
+  /** Primary tint colour (used by particles + drift). */
+  color: string;
+}
+
+export interface VideoLayer extends BgLayerBase {
+  type: "video";
+  url: string;
+  /** Optional poster image while the video loads or for reduced-motion users. */
+  poster: string | null;
+  /** 0–1 */
+  opacity: number;
+}
+
+export type BgLayer =
+  | GradientLayer
+  | MeshLayer
+  | PatternLayer
+  | ImageLayer
+  | AnimatedLayer
+  | VideoLayer;
 
 export interface ThemeBackground {
   layers: BgLayer[];
@@ -335,6 +361,25 @@ function normalizeBackground(raw: Partial<ThemeBackground> | undefined, legacy: 
             blend,
           });
         }
+      } else if ((l as BgLayer).type === "animated") {
+        const a = l as Partial<AnimatedLayer>;
+        const kind: AnimatedKind = a.kind === "noise" || a.kind === "particles" ? a.kind : "drift";
+        layers.push({
+          id, visible, type: "animated",
+          kind,
+          intensity: typeof a.intensity === "number" ? Math.max(0, Math.min(1, a.intensity)) : 0.5,
+          color: typeof a.color === "string" ? a.color : "#ffffff",
+        });
+      } else if ((l as BgLayer).type === "video") {
+        const v = l as Partial<VideoLayer>;
+        if (typeof v.url === "string" && v.url.length > 0) {
+          layers.push({
+            id, visible, type: "video",
+            url: v.url,
+            poster: typeof v.poster === "string" ? v.poster : null,
+            opacity: typeof v.opacity === "number" ? Math.max(0, Math.min(1, v.opacity)) : 1,
+          });
+        }
       }
     }
     if (layers.length > 0) return { layers };
@@ -415,5 +460,25 @@ export function newImageLayer(url: string): ImageLayer {
     blur: 0,
     size: "cover",
     blend: "normal",
+  };
+}
+
+export function newAnimatedLayer(kind: AnimatedKind = "drift"): AnimatedLayer {
+  return {
+    id: crypto.randomUUID(),
+    type: "animated",
+    kind,
+    intensity: 0.5,
+    color: "#ffffff",
+  };
+}
+
+export function newVideoLayer(url: string): VideoLayer {
+  return {
+    id: crypto.randomUUID(),
+    type: "video",
+    url,
+    poster: null,
+    opacity: 1,
   };
 }

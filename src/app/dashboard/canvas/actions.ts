@@ -27,6 +27,9 @@ import {
   type ShapeKind,
   type StickerIcon,
 } from "@/lib/visual-elements";
+import { validateImageFile } from "@/lib/image-magic";
+import { addStorageUsage, ensureStorageHeadroom } from "@/lib/storage-quota";
+import { rateLimit, RL_UPLOAD } from "@/lib/rate-limit";
 
 async function getUsernameForUser(userId: string): Promise<string | null> {
   const supabase = createAdminClient();
@@ -290,21 +293,6 @@ export async function createStickerElement(icon: StickerIcon) {
 }
 
 const MAX_ELEMENT_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
-const IMAGE_MAGIC_BYTES: Array<{ ext: string; bytes: number[]; offset?: number }> = [
-  { ext: "png", bytes: [0x89, 0x50, 0x4e, 0x47] },
-  { ext: "jpg", bytes: [0xff, 0xd8, 0xff] },
-  { ext: "gif", bytes: [0x47, 0x49, 0x46, 0x38] },
-  { ext: "webp", bytes: [0x57, 0x45, 0x42, 0x50], offset: 8 }, // after RIFF/size
-];
-
-function detectImageExt(buf: Uint8Array): string | null {
-  for (const sig of IMAGE_MAGIC_BYTES) {
-    const offset = sig.offset ?? 0;
-    if (buf.length < offset + sig.bytes.length) continue;
-    if (sig.bytes.every((b, i) => buf[offset + i] === b)) return sig.ext;
-  }
-  return null;
-}
 
 /**
  * Upload a creator-supplied image and create an `image` element pointing at it.
@@ -317,22 +305,28 @@ export async function uploadAndCreateImageElement(formData: FormData) {
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated" };
 
+  const rl = await rateLimit(session.user.id, RL_UPLOAD);
+  if (!rl.allowed) return { error: `Too many uploads. Try again in ${rl.retryAfterSeconds}s.` };
+
   const file = formData.get("file") as File | null;
   if (!file || file.size === 0) return { error: "No file selected" };
   if (file.size > MAX_ELEMENT_IMAGE_BYTES) return { error: "Image must be under 5MB" };
 
-  const buf = new Uint8Array(await file.arrayBuffer());
-  const ext = detectImageExt(buf);
-  if (!ext) return { error: "Unsupported image format (use PNG, JPG, GIF, or WebP)" };
+  const quota = await ensureStorageHeadroom(session.user.id, file.size);
+  if (!quota.ok) return { error: quota.reason };
+
+  const validated = await validateImageFile(file);
+  if (!validated.ok) return { error: validated.reason };
 
   const supabase = createAdminClient();
-  const path = `${session.user.id}/element-images/${Date.now()}.${ext}`;
+  const path = `${session.user.id}/element-images/${Date.now()}.${validated.ext}`;
   const { error: uploadError } = await supabase.storage
     .from("backgrounds")
-    .upload(path, file, { upsert: true, contentType: file.type || `image/${ext}` });
+    .upload(path, file, { upsert: true, contentType: file.type || `image/${validated.ext}` });
   if (uploadError) return { error: uploadError.message };
 
   const { data: { publicUrl } } = supabase.storage.from("backgrounds").getPublicUrl(path);
+  await addStorageUsage(session.user.id, file.size);
   const size = DEFAULT_VISUAL_ELEMENT_SIZE.image;
   return createElement({
     type: "image",

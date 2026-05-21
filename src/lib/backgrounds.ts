@@ -157,12 +157,20 @@ export function imageLayerStyle(layer: ImageLayer): React.CSSProperties {
 }
 
 // ── Per-layer style dispatch ────────────────────────────────
+/**
+ * CSS-only styles for the layer types that can be expressed as a single
+ * `style` object. Animated + video layers render as React components in
+ * `BackgroundLayers` and never call this helper.
+ */
 export function layerStyle(layer: BgLayer): React.CSSProperties {
   switch (layer.type) {
     case "gradient": return gradientLayerStyle(layer);
     case "mesh":     return meshLayerStyle(layer);
     case "pattern":  return patternLayerStyle(layer);
     case "image":    return imageLayerStyle(layer);
+    case "animated":
+    case "video":
+      return {};
   }
 }
 
@@ -173,5 +181,7 @@ export function layerLabel(layer: BgLayer): string {
     case "mesh":     return `Mesh · ${layer.blobs.length} blobs`;
     case "pattern":  return `Pattern · ${PATTERNS[layer.kind]?.label ?? layer.kind}`;
     case "image":    return "Image";
+    case "animated": return `Animated · ${layer.kind}`;
+    case "video":    return "Video";
   }
 }

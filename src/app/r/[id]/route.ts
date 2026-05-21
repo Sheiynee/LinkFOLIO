@@ -1,13 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { rateLimit, RL_REDIRECT } from "@/lib/rate-limit";
 
 const BOT_REGEX = /bot|crawler|spider|crawling|preview|facebookexternalhit|whatsapp|slackbot|discordbot|twitterbot/i;
+
+function clientKey(request: NextRequest): string {
+  const forwarded = request.headers.get("x-forwarded-for");
+  const real = request.headers.get("x-real-ip");
+  return (forwarded?.split(",")[0]?.trim() || real || "anon").toLowerCase();
+}
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const supabase = createAdminClient();
+
+  // Rate-limit anonymous click traffic per IP before we hit the DB. Bots are
+  // also rate-limited so a runaway crawler can't burn through our budget.
+  const rl = await rateLimit(clientKey(request), RL_REDIRECT);
+  if (!rl.allowed) {
+    return new NextResponse("Too many requests", {
+      status: 429,
+      headers: { "Retry-After": String(rl.retryAfterSeconds) },
+    });
+  }
 
   const { data: block } = await supabase
     .from("blocks")

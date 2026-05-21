@@ -6,6 +6,9 @@ import { revalidatePath } from "next/cache";
 import { normalizeTheme, type Theme } from "@/lib/themes";
 import { sanitizeFamilyName } from "@/lib/typography";
 import { getUserFontUsageBytes } from "@/lib/user-fonts";
+import { validateImageFile } from "@/lib/image-magic";
+import { addStorageUsage, ensureStorageHeadroom, subtractStorageUsage } from "@/lib/storage-quota";
+import { rateLimit, RL_UPLOAD } from "@/lib/rate-limit";
 
 const MAX_FONT_BYTES = 1024 * 1024; // 1 MB per file (woff2)
 const USER_FONT_QUOTA_BYTES = 5 * 1024 * 1024; // 5 MB total per user
@@ -48,6 +51,9 @@ export async function uploadUserFont(formData: FormData) {
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated" };
 
+  const rl = await rateLimit(session.user.id, RL_UPLOAD);
+  if (!rl.allowed) return { error: `Too many uploads. Try again in ${rl.retryAfterSeconds}s.` };
+
   const file = formData.get("file") as File | null;
   const rawName = (formData.get("family_name") as string | null) ?? "";
   if (!file || file.size === 0) return { error: "No file selected" };
@@ -68,11 +74,13 @@ export async function uploadUserFont(formData: FormData) {
   const familyName = sanitizeFamilyName(rawName || file.name.replace(/\.woff2?$/i, ""));
   if (!familyName) return { error: "Font family name is required" };
 
-  // Per-user quota.
+  // Per-user font quota (5MB across woff2 files) and global storage quota.
   const used = await getUserFontUsageBytes(session.user.id);
   if (used + file.size > USER_FONT_QUOTA_BYTES) {
     return { error: "Font storage quota reached. Delete an existing font first." };
   }
+  const headroom = await ensureStorageHeadroom(session.user.id, file.size);
+  if (!headroom.ok) return { error: headroom.reason };
 
   const supabase = createAdminClient();
   const path = `${session.user.id}/${Date.now()}-${familyName.replace(/\s+/g, "_")}.woff2`;
@@ -104,6 +112,8 @@ export async function uploadUserFont(formData: FormData) {
     return { error: insertError.message };
   }
 
+  await addStorageUsage(session.user.id, file.size);
+
   revalidatePath("/dashboard/theme");
   return { ok: true, font: inserted };
 }
@@ -112,21 +122,29 @@ export async function uploadBackgroundImage(formData: FormData) {
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated" };
 
+  const rl = await rateLimit(session.user.id, RL_UPLOAD);
+  if (!rl.allowed) return { error: `Too many uploads. Try again in ${rl.retryAfterSeconds}s.` };
+
   const file = formData.get("file") as File | null;
   if (!file || file.size === 0) return { error: "No file selected" };
   if (file.size > MAX_BG_IMAGE_BYTES) return { error: "Image must be under 5MB" };
-  if (!file.type.startsWith("image/")) return { error: "File must be an image or GIF" };
+
+  const quota = await ensureStorageHeadroom(session.user.id, file.size);
+  if (!quota.ok) return { error: quota.reason };
+
+  const validated = await validateImageFile(file);
+  if (!validated.ok) return { error: validated.reason };
 
   const supabase = createAdminClient();
-  const ext = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "") || "png";
-  const path = `${session.user.id}/bg-${Date.now()}.${ext}`;
+  const path = `${session.user.id}/bg-${Date.now()}.${validated.ext}`;
 
   const { error: uploadError } = await supabase.storage
     .from("backgrounds")
-    .upload(path, file, { upsert: true, contentType: file.type });
+    .upload(path, file, { upsert: true, contentType: file.type || `image/${validated.ext}` });
   if (uploadError) return { error: uploadError.message };
 
   const { data: { publicUrl } } = supabase.storage.from("backgrounds").getPublicUrl(path);
+  await addStorageUsage(session.user.id, file.size);
   return { ok: true, url: publicUrl };
 }
 
@@ -137,7 +155,7 @@ export async function deleteUserFont(id: string) {
   const supabase = createAdminClient();
   const { data: row, error: lookupError } = await supabase
     .from("user_fonts")
-    .select("storage_path, user_id")
+    .select("storage_path, user_id, size_bytes")
     .eq("id", id)
     .single();
   if (lookupError || !row) return { error: "Font not found" };
@@ -149,6 +167,8 @@ export async function deleteUserFont(id: string) {
     .delete()
     .eq("id", id);
   if (deleteError) return { error: deleteError.message };
+
+  await subtractStorageUsage(session.user.id, Number(row.size_bytes ?? 0));
 
   const username = await getUsernameForUser(session.user.id);
   revalidatePath("/dashboard/theme");

@@ -6,6 +6,8 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ProfileForm } from "./profile-form";
+import { AccountPanel } from "./account-panel";
+import { getUserStorageUsage } from "@/lib/storage-quota";
 
 export default async function SettingsPage() {
   const session = await auth();
@@ -14,11 +16,12 @@ export default async function SettingsPage() {
   const supabase = createAdminClient();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("username, display_name, bio, avatar_url")
+    .select("username, display_name, bio, avatar_url, deleted_at, deleted_grace_until")
     .eq("id", session.user.id)
     .single();
 
   if (!profile) redirect("/dashboard");
+  const usage = await getUserStorageUsage(session.user.id);
 
   return (
     <main className="min-h-screen bg-background">
@@ -28,7 +31,7 @@ export default async function SettingsPage() {
         </Button>
         <span className="font-bold text-lg">Settings</span>
       </header>
-      <div className="max-w-2xl mx-auto px-6 py-8">
+      <div className="max-w-2xl mx-auto px-6 py-8 space-y-6">
         <Card>
           <CardHeader>
             <CardTitle>Edit profile</CardTitle>
@@ -38,6 +41,12 @@ export default async function SettingsPage() {
             <ProfileForm initial={profile} />
           </CardContent>
         </Card>
+
+        <AccountPanel
+          storageUsage={usage}
+          pendingDelete={!!profile.deleted_grace_until}
+          graceUntil={profile.deleted_grace_until}
+        />
       </div>
     </main>
   );

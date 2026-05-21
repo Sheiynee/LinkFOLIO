@@ -36,11 +36,13 @@ async function getProfile(username: string): Promise<LoadedProfile | null> {
   const supabase = createAdminClient();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, username, display_name, bio, avatar_url, theme, layout_mode")
+    .select("id, username, display_name, bio, avatar_url, theme, layout_mode, deleted_at")
     .eq("username", username.toLowerCase())
     .maybeSingle();
 
-  if (!profile) return null;
+  // Soft-deleted profiles (in the 30-day grace window) read as 404 to the
+  // public until the account is restored or fully removed.
+  if (!profile || profile.deleted_at) return null;
 
   const layout_mode = (profile.layout_mode as LayoutMode) ?? "stack";
 

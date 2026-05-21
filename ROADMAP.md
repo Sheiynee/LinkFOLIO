@@ -229,38 +229,42 @@ Positioned elements live in a separate `elements` table that mirrors block conte
 
 All operational and compliance work that must land before public launch, regardless of feature scope.
 
-### Security
-- **Rate limiting** (Upstash Redis): `/r/{id}` 60/min/IP, uploads 10/min/user, auth callbacks 20/min/IP
-- **CSRF tokens** on every server action
-- **File magic-byte validation** — verify signatures, not MIME
-- **URL allow/block list** — deny `localhost`, RFC1918, `file:`, `javascript:`, `data:`, known malware patterns
-- **Reserved usernames** — `admin api auth dashboard r about login signup …`
-- **Storage quotas** per user (50MB default; trigger-maintained)
-- **Input sanitization** — strip control chars, NFKC normalize
-- **Audit log** — security-relevant events with IP/UA
+### Security (shipped)
+- **Reserved usernames** — 40-entry denylist (`admin`, `api`, `auth`, `dashboard`, `r`, `login`, `signup`, `linkfolio`, …) stored in `reserved_usernames` with a local fallback set for DB-outage safety. Enforced in both `checkUsernameAvailable` and `updateProfile`.
+- **Storage quotas** — 50 MB/user across avatars, backgrounds, fonts, and element-images. `user_storage` table holds the running counter (incremented on upload, decremented on font delete) and the settings page surfaces a usage bar.
+- **Magic-byte validation everywhere** — shared `lib/image-magic.ts` validates PNG/JPG/GIF/WebP signatures before upload; applied to avatar, background, and element-image paths (font uploads already had a WOFF2 check).
+- **Rate limiting (Postgres-backed)** — `rate_limit_buckets` table + `lib/rate-limit.ts` sliding-window limiter. Policies: `/r/{id}` redirects 60/min/IP, uploads 10/min/user, auth scope reserved for future use. Chose Postgres over Upstash to avoid a second SaaS dependency.
 
-### Performance
-- `next/image` for avatars, backgrounds, image elements
-- Edge runtime for `/r/{id}`
-- Materialized views for analytics (`mv_block_clicks_daily`, `mv_page_views_daily`, refreshed every 5 min via `pg_cron`)
-- Preconnect to Supabase domain
-- Static landing page (`force-static`)
-- Bundle analysis + lucide tree-shake
+### Security (still TODO)
+- CSRF tokens on every server action (NextAuth's session cookie helps but isn't sufficient).
+- URL allow/block list — deny `localhost`, RFC1918, `file:`, `javascript:`, `data:`, known malware patterns on every user-supplied link.
+- Input sanitization — strip control chars, NFKC normalize.
+- Audit log — security-relevant events with IP/UA (migration 16 placeholder).
 
-### Sharing & SEO
-- **Live-now badge on OG images** — when a streamer is live at share time, the OG card reflects it. Requires Twitch EventSub from Phase 1's freshness work.
-- QR code modal for the public URL
-- Native Web Share API button
-- Robots.txt + sitemap (opt-in)
+### Performance (still TODO)
+- `next/image` for avatars, backgrounds, image elements (currently `<img>` tags).
+- Edge runtime for `/r/{id}`.
+- Materialized views for analytics (`mv_block_clicks_daily`, `mv_page_views_daily`) refreshed every 5 min via `pg_cron`.
+- Preconnect to Supabase domain.
+- Static landing page (`force-static`).
+- Bundle analysis + lucide tree-shake audit.
 
-### Animated backgrounds + video backgrounds
-Deferred from Phase 3, ships here.
+### Sharing & SEO (still TODO)
+- **Live-now badge on OG images** — when a streamer is live at share time, the OG card reflects it. Requires Twitch EventSub from Phase 6.
+- QR code modal for the public URL.
+- Native Web Share API button.
+- Robots.txt + sitemap (opt-in).
 
-### Compliance
-- Terms of Service
-- Privacy Policy
-- Account deletion + 30-day grace period
-- Data export (JSON dump)
+### Animated + video backgrounds (shipped)
+- `BgLayer` union extended with `animated` (kind: drift · noise · particles) and `video` types. `lib/themes.ts` `normalizeBackground` handles both safely.
+- `<AnimatedBackgroundLayer>` client component renders drift (CSS keyframe), noise (animated SVG `<feTurbulence>`), and particles (canvas + RAF) — all respect `prefers-reduced-motion` and render a still snapshot for motion-sensitive viewers.
+- `<video>` layer is muted-autoplay-loop with `playsInline` and optional poster. Theme editor exposes both via picker buttons + per-layer inspectors.
+
+### Compliance (shipped)
+- **Account deletion** — soft delete via `profiles.deleted_at` + `deleted_grace_until` (30-day grace). Page goes dark immediately (`/{username}` 404s deleted profiles); user can cancel from settings during the grace window. `hardDeleteAccount` server action wipes storage + rows when the grace expires (the periodic cleanup cron is a Phase 6 follow-up).
+- **Data export (GDPR)** — `exportUserData` action assembles profile + blocks + elements + user_fonts + page_views + block_clicks + storage row into a single JSON dump that the dashboard panel downloads client-side.
+- **Terms of Service** at [/legal/terms](src/app/legal/terms/page.tsx) — covers accounts, content licensing, third-party platforms, storage, deletion, no-warranty.
+- **Privacy Policy** at [/legal/privacy](src/app/legal/privacy/page.tsx) — covers what's collected (and what isn't), retention, third-party services, user rights, children.
 
 ---
 
@@ -411,14 +415,14 @@ These come up often. Saying no is part of the strategy.
 | 11 | `11_canvas_elements.sql` | `elements` table (positioned canvas elements with widget support, RLS, updated_at trigger) + `profiles.layout_mode` flag |
 | 12 | `12_canvas_visual_elements.sql` | Widens `elements_type_check` with `'shape'`, `'sticker'`, `'image'` and re-asserts the widget_kind/type pairing rule for the new types |
 | 13 | `13_canvas_regions.sql` | Widens `elements_type_check` with `'region'` for per-section background regions |
+| 14 | `14_hardening.sql` | `reserved_usernames` seed, `user_storage` counter, `rate_limit_buckets`, `profiles.deleted_at` + `deleted_grace_until` |
 
 ### Planned migrations
 
 | # | Purpose | Phase |
 |---|---|---|
-| 14 | `theme_background_layers`: image/video/animated layers + asset validation tables | 5 |
 | 15 | `elements_mobile_overrides`: tighten mobile_* columns once Phase 4b auto-reflow lands | 4 |
-| 16 | `audit_log`, `user_storage`, rate-limit support tables | 5 |
+| 16 | `audit_log`: security-relevant events with IP/UA | 5 |
 | 17 | `creator_live_status`: cached live state per creator with EventSub timestamps | 6 |
 | 18 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 |
 | 19 | `domains`: custom domain verification | 7 |
