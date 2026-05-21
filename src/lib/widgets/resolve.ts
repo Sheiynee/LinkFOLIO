@@ -136,28 +136,7 @@ export function resolveWidget(kind: WidgetKind | "auto", input: string): Resolve
   return { error: "Widget kind not implemented yet" };
 }
 
-/**
- * Picker metadata for each kind: a human label, the placeholder text the
- * input should use, and a short hint. Drives the canvas-mode widget
- * picker UI.
- */
-export interface WidgetPickerSpec {
-  kind: WidgetKind;
-  label: string;
-  placeholder: string;
-}
-
-export const WIDGET_PICKER_SPECS: WidgetPickerSpec[] = [
-  { kind: "twitch_live",    label: "Twitch live",      placeholder: "twitch.tv/channel" },
-  { kind: "twitch_vod",     label: "Twitch latest VOD", placeholder: "twitch.tv/channel" },
-  { kind: "youtube_channel",label: "YouTube channel",  placeholder: "youtube.com/@handle" },
-  { kind: "youtube_video",  label: "YouTube video",    placeholder: "youtube.com/watch?v=…" },
-  { kind: "youtube_live",   label: "YouTube live",     placeholder: "youtube.com/@handle" },
-  { kind: "github_repo",    label: "GitHub repo",      placeholder: "owner/repo" },
-  { kind: "github_user",    label: "GitHub user",      placeholder: "@username" },
-  { kind: "discord_invite", label: "Discord invite",   placeholder: "discord.gg/xxxxx" },
-  { kind: "spotify_embed",  label: "Spotify",          placeholder: "open.spotify.com/…" },
-  { kind: "tiktok_video",   label: "TikTok video",     placeholder: "tiktok.com/@user/video/…" },
-  { kind: "tip_jar",        label: "Tip jar",          placeholder: "ko-fi.com/username" },
-  { kind: "og_card",        label: "Generic link card", placeholder: "https://…" },
-];
+// Picker metadata moved to `./picker-specs.ts` so the canvas client can
+// import it without pulling in the server-only API fetchers this module
+// transitively depends on. Re-export from there for compatibility.
+export { WIDGET_PICKER_SPECS, type WidgetPickerSpec } from "./picker-specs";

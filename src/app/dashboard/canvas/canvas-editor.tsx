@@ -52,7 +52,7 @@ import {
   updateMobilePlacements,
   uploadAndCreateImageElement,
 } from "./actions";
-import { WIDGET_PICKER_SPECS } from "@/lib/widgets/resolve";
+import { WIDGET_PICKER_SPECS } from "@/lib/widgets/picker-specs";
 import type { WidgetKind } from "@/lib/widgets/types";
 import { Textarea } from "@/components/ui/textarea";
 import {
