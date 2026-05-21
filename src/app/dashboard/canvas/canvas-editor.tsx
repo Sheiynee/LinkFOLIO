@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { ProfileCanvasRender } from "@/components/profile-canvas-render";
 import type { ProfileRenderData } from "@/components/profile-render";
 import type { Element } from "@/lib/elements";
@@ -68,9 +69,13 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
   const [guides, setGuides] = useState<SnapGuide[]>([]);
   const [marquee, setMarquee] = useState<SelectionBox | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [scale, setScale] = useState(1);
+  const [naturalH, setNaturalH] = useState(900);
   const [, startTransition] = useTransition();
 
   const canvasRef = useRef<HTMLDivElement>(null);
+  const scrollOuterRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<Gesture | null>(null);
   const elementsRef = useRef(elements);
   const selectedIdsRef = useRef(selectedIds);
@@ -83,16 +88,46 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
   useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
   useEffect(() => { viewRef.current = view; }, [view]);
 
+  // Natural width of the rendered canvas (data-canvas-root + horizontal padding
+  // from ProfileCanvasRender's outer container).
+  const naturalW = (view === "mobile" ? MOBILE_CANVAS_WIDTH : CANVAS_WIDTH) + 32;
+
+  // Viewport-aware scaling: shrink the canvas to fit narrow screens instead of
+  // forcing a horizontal scroll.
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") return;
+    const outer = scrollOuterRef.current;
+    const inner = canvasRef.current;
+    if (!outer || !inner) return;
+    function update() {
+      const availW = outer!.clientWidth - 8;
+      const s = Math.min(1, availW / naturalW);
+      setScale(s > 0 ? s : 1);
+      setNaturalH(inner!.scrollHeight);
+    }
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(outer);
+    ro.observe(inner);
+    return () => ro.disconnect();
+  }, [naturalW]);
+
   /**
-   * Coordinate origin for pointer math. The outer canvasRef wraps the full
-   * left column (so we can attach a single pointerdown listener), but
+   * Coordinate origin + scale for pointer math. The outer canvasRef wraps the
+   * full left column (so we can attach a single pointerdown listener), but
    * element x/y are relative to the inner 600px (or 360px in mobile view)
-   * centered canvas. Anchor on that via the data-canvas-root attribute so
-   * `e.clientX - rect.left` produces canvas-local coordinates.
+   * centered canvas. Anchor on that via the data-canvas-root attribute. When
+   * the canvas is visually downscaled on narrow viewports, getBoundingClientRect
+   * returns the *visual* rect — convert pointer deltas back to canvas-px by
+   * dividing by `scale`.
    */
-  const canvasRootRect = useCallback((): DOMRect | null => {
+  const canvasMetrics = useCallback((): { rect: DOMRect; scale: number } | null => {
     const root = canvasRef.current?.querySelector("[data-canvas-root]") as HTMLElement | null;
-    return root?.getBoundingClientRect() ?? null;
+    if (!root) return null;
+    const rect = root.getBoundingClientRect();
+    const expected = viewRef.current === "mobile" ? MOBILE_CANVAS_WIDTH : CANVAS_WIDTH;
+    const scale = rect.width > 0 ? rect.width / expected : 1;
+    return { rect, scale };
   }, []);
 
   const history = useCanvasHistory(setElements);
@@ -152,10 +187,10 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
   // ─── Gesture: pointerdown router ───────────────────────────
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     const target = e.target as HTMLElement;
-    const canvasRect = canvasRootRect();
-    if (!canvasRect) return;
-    const px = e.clientX - canvasRect.left;
-    const py = e.clientY - canvasRect.top;
+    const m = canvasMetrics();
+    if (!m) return;
+    const px = (e.clientX - m.rect.left) / m.scale;
+    const py = (e.clientY - m.rect.top) / m.scale;
 
     // Resize / rotate handle?
     const handleEl = target.closest("[data-handle]") as HTMLElement | null;
@@ -246,9 +281,9 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
   // ─── Window-level pointermove/up while a gesture is active ──
   useEffect(() => {
     function localPoint(ev: PointerEvent) {
-      const r = canvasRootRect();
-      if (!r) return null;
-      return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+      const m = canvasMetrics();
+      if (!m) return null;
+      return { x: (ev.clientX - m.rect.left) / m.scale, y: (ev.clientY - m.rect.top) / m.scale };
     }
 
     function move(ev: PointerEvent) {
@@ -373,7 +408,7 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
     };
-  }, [history, patchLocal, queueSave, canvasRootRect]);
+  }, [history, patchLocal, queueSave, canvasMetrics]);
 
   // ─── Keyboard ─────────────────────────────────────────────
   useEffect(() => {
@@ -400,11 +435,18 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
         ev.preventDefault();
         const list = elementsRef.current.filter((e) => ids.includes(e.id));
         clipboardRef.current = list;
+        writeClipboardIds(list.map((e) => e.id));
         return;
       }
-      if (mod && ev.key.toLowerCase() === "v" && clipboardRef.current.length > 0) {
+      if (mod && ev.key.toLowerCase() === "v") {
         ev.preventDefault();
-        doDuplicate(clipboardRef.current.map((e) => e.id));
+        readClipboardIds().then((sysIds) => {
+          if (sysIds && sysIds.length > 0) {
+            doDuplicate(sysIds);
+          } else if (clipboardRef.current.length > 0) {
+            doDuplicate(clipboardRef.current.map((e) => e.id));
+          }
+        });
         return;
       }
       if (mod && ev.key.toLowerCase() === "d" && ids.length > 0) {
@@ -623,7 +665,7 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
 
   // ─── Render ──────────────────────────────────────────────
   return (
-    <div className="grid lg:grid-cols-[minmax(0,1fr)_320px] gap-6">
+    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-6 relative">
       <div className="space-y-3 min-w-0">
         {error && (
           <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive flex items-center justify-between">
@@ -632,67 +674,131 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
           </div>
         )}
 
-        <HelperBar selectionCount={selectedIds.size} view={view} />
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <HelperBar selectionCount={selectedIds.size} view={view} />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="lg:hidden shrink-0"
+            onClick={() => setDrawerOpen(true)}
+          >
+            Tools
+          </Button>
+        </div>
 
         <Card className="overflow-hidden">
           <div className="bg-muted px-4 py-2 text-xs font-mono text-muted-foreground border-b flex items-center justify-between">
             <span>Preview · /{profile.username}</span>
-            <span className="text-[10px] uppercase tracking-wide">{view}</span>
+            <span className="text-[10px] uppercase tracking-wide">
+              {view}{scale < 0.999 ? ` · ${Math.round(scale * 100)}%` : ""}
+            </span>
           </div>
           <div
+            ref={scrollOuterRef}
             className="overflow-auto"
             style={{ touchAction: "none" }}
             onPointerDown={onPointerDown}
           >
             <div
-              ref={canvasRef}
-              className="relative flex justify-center min-h-[640px]"
+              style={{
+                width: naturalW * scale,
+                height: Math.max(640, naturalH * scale),
+                margin: "0 auto",
+                position: "relative",
+              }}
             >
-              <ProfileCanvasRender
-                profile={profile}
-                elements={elements}
-                theme={theme}
-                widgetData={widgetData}
-                userFonts={userFonts}
-                preview
-                view={view}
-                overlay={
-                  <>
-                    {selectionBox && (
-                      <SelectionOverlay
-                        box={selectionBox}
-                        rotation={singleSelected?.rotation ?? 0}
-                        showResize={selectedIds.size === 1}
-                        showRotate={selectedIds.size === 1 && view === "desktop"}
-                      />
-                    )}
-                    <SnapGuides guides={guides} height={canvasH} />
-                    <MarqueeBox box={marquee} />
-                  </>
-                }
-                onSurfaceClick={() => setSelectedIds(new Set())}
-              />
+              <div
+                ref={canvasRef}
+                className="flex justify-center"
+                style={{
+                  width: naturalW,
+                  minHeight: 640,
+                  transform: `scale(${scale})`,
+                  transformOrigin: "top left",
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                }}
+              >
+                <ProfileCanvasRender
+                  profile={profile}
+                  elements={elements}
+                  theme={theme}
+                  widgetData={widgetData}
+                  userFonts={userFonts}
+                  preview
+                  view={view}
+                  overlay={
+                    <>
+                      {selectionBox && (
+                        <SelectionOverlay
+                          box={selectionBox}
+                          rotation={singleSelected?.rotation ?? 0}
+                          showResize={selectedIds.size === 1 && !(singleSelected?.rotation ?? 0)}
+                          showRotate={selectedIds.size === 1 && view === "desktop"}
+                        />
+                      )}
+                      <SnapGuides guides={guides} height={canvasH} />
+                      <MarqueeBox box={marquee} />
+                    </>
+                  }
+                  onSurfaceClick={() => setSelectedIds(new Set())}
+                />
+              </div>
             </div>
           </div>
         </Card>
       </div>
 
-      <SidePanel
-        selectedIds={selectedIds}
-        selectedElement={singleSelected}
-        view={view}
-        onViewChange={setView}
-        onUndo={doUndo}
-        onRedo={doRedo}
-        canUndo={history.canUndo()}
-        canRedo={history.canRedo()}
-        onGroupOp={applyGroupOp}
-        onDuplicate={() => doDuplicate(Array.from(selectedIds))}
-        onDelete={doDeleteSelection}
-        onResetMobile={resetMobileForSelection}
-        onAdded={pushAdded}
-        onError={setError}
-      />
+      {/* Drawer scrim (mobile only) */}
+      {drawerOpen && (
+        <div
+          aria-hidden
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          onClick={() => setDrawerOpen(false)}
+        />
+      )}
+
+      {/* Sidebar — slide-in drawer on <lg, static column on lg+ */}
+      <div
+        className={cn(
+          "fixed inset-y-0 right-0 z-50 w-[min(340px,92vw)] transition-transform duration-200 ease-out shadow-2xl",
+          "lg:static lg:w-auto lg:translate-x-0 lg:shadow-none lg:transition-none",
+          drawerOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"
+        )}
+      >
+        <div className="h-full overflow-y-auto bg-background lg:bg-transparent lg:overflow-visible">
+          <div className="flex items-center justify-between px-4 pt-4 pb-2 lg:hidden">
+            <span className="text-sm font-semibold">Tools</span>
+            <button
+              type="button"
+              className="text-sm text-muted-foreground hover:text-foreground"
+              onClick={() => setDrawerOpen(false)}
+            >
+              Close
+            </button>
+          </div>
+          <SidePanel
+            selectedIds={selectedIds}
+            selectedElement={singleSelected}
+            view={view}
+            onViewChange={setView}
+            onUndo={doUndo}
+            onRedo={doRedo}
+            canUndo={history.canUndo()}
+            canRedo={history.canRedo()}
+            onGroupOp={applyGroupOp}
+            onDuplicate={() => doDuplicate(Array.from(selectedIds))}
+            onDelete={doDeleteSelection}
+            onResetMobile={resetMobileForSelection}
+            onAdded={pushAdded}
+            onError={setError}
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -1024,6 +1130,31 @@ function ClusterRow({ label, children }: { label: string; children: React.ReactN
       </div>
     </div>
   );
+}
+
+const CLIPBOARD_MARKER = "linkfolio-canvas-clipboard:";
+
+async function writeClipboardIds(ids: string[]) {
+  if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) return;
+  try {
+    await navigator.clipboard.writeText(CLIPBOARD_MARKER + JSON.stringify({ ids }));
+  } catch {
+    // Permission denied / insecure context — silently fall back to in-memory.
+  }
+}
+
+async function readClipboardIds(): Promise<string[] | null> {
+  if (typeof navigator === "undefined" || !navigator.clipboard?.readText) return null;
+  try {
+    const text = await navigator.clipboard.readText();
+    if (!text.startsWith(CLIPBOARD_MARKER)) return null;
+    const parsed = JSON.parse(text.slice(CLIPBOARD_MARKER.length)) as { ids?: unknown };
+    if (!Array.isArray(parsed.ids)) return null;
+    const ids = parsed.ids.filter((v): v is string => typeof v === "string");
+    return ids.length > 0 ? ids : null;
+  } catch {
+    return null;
+  }
 }
 
 function modKeyLabel(): string {
