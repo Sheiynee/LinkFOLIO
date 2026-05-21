@@ -7,6 +7,7 @@ import {
   AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical,
   StretchHorizontal, StretchVertical, Keyboard,
+  Square, Circle, Triangle, Shapes, ImageIcon, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -38,13 +39,26 @@ import { useCanvasHistory, diffPlacements } from "./canvas-history";
 import {
   batchUpdateElements,
   createElement,
+  createShapeElement,
+  createStickerElement,
   createWidgetElementFromUrl,
   deleteElement,
   deleteElements,
   duplicateElements,
   updateElement,
   updateMobilePlacements,
+  uploadAndCreateImageElement,
 } from "./actions";
+import {
+  IMAGE_MASKS,
+  STICKER_ICONS,
+  readImageMeta,
+  readShapeMeta,
+  readStickerMeta,
+  type ImageMask,
+  type ShapeKind,
+} from "@/lib/visual-elements";
+import { StickerGlyph } from "@/components/sticker-glyph";
 
 type View = "desktop" | "mobile";
 
@@ -631,6 +645,24 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
     });
   }
 
+  /** Patch an element's meta jsonb both locally and on the server. */
+  function patchMeta(id: string, patch: Record<string, unknown>) {
+    history.push(elementsRef.current);
+    setElements((es) =>
+      es.map((e) => {
+        if (e.id !== id) return e;
+        const next = { ...(e.meta ?? {}), ...patch };
+        return { ...e, meta: next };
+      })
+    );
+    startTransition(async () => {
+      const el = elementsRef.current.find((e) => e.id === id);
+      if (!el) return;
+      const res = await updateElement(id, { meta: { ...(el.meta ?? {}), ...patch } });
+      if (res.error) setError(res.error);
+    });
+  }
+
   // ─── Mobile placement helpers ─────────────────────────────
   function resetMobileForSelection() {
     const ids = Array.from(selectedIdsRef.current);
@@ -796,6 +828,7 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
             onResetMobile={resetMobileForSelection}
             onAdded={pushAdded}
             onError={setError}
+            onPatchMeta={patchMeta}
           />
         </div>
       </div>
@@ -875,6 +908,7 @@ function SidePanel({
   onResetMobile,
   onAdded,
   onError,
+  onPatchMeta,
 }: {
   selectedIds: Set<string>;
   selectedElement: Element | null;
@@ -890,6 +924,7 @@ function SidePanel({
   onResetMobile: () => void;
   onAdded: (el: Element) => void;
   onError: (msg: string) => void;
+  onPatchMeta: (id: string, patch: Record<string, unknown>) => void;
 }) {
   const [pending, startTransition] = useTransition();
   const [linkTitle, setLinkTitle] = useState("");
@@ -941,6 +976,35 @@ function SidePanel({
       }
     });
   }
+
+  function addShape(kind: ShapeKind) {
+    startTransition(async () => {
+      const res = await createShapeElement(kind);
+      if (res.error) onError(res.error);
+      else if (res.element) onAdded(res.element as Element);
+    });
+  }
+
+  function addSticker(icon: (typeof STICKER_ICONS)[number]) {
+    startTransition(async () => {
+      const res = await createStickerElement(icon);
+      if (res.error) onError(res.error);
+      else if (res.element) onAdded(res.element as Element);
+    });
+  }
+
+  function handleImageFile(file: File | null) {
+    if (!file) return;
+    const fd = new FormData();
+    fd.append("file", file);
+    startTransition(async () => {
+      const res = await uploadAndCreateImageElement(fd);
+      if (res.error) onError(res.error);
+      else if (res.element) onAdded(res.element as Element);
+    });
+  }
+
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const canDist = selectedIds.size >= 3;
   const canAlign = selectedIds.size >= 2;
@@ -1051,10 +1115,83 @@ function SidePanel({
         </Button>
       </div>
 
+      <div className="border-t" />
+
+      {/* ── Shapes ── */}
+      <div className="space-y-2">
+        <SectionHeader icon={<Shapes className="h-3.5 w-3.5" />}>Shape</SectionHeader>
+        <div className="grid grid-cols-4 gap-2">
+          <ShapePickBtn label="Rect" onClick={() => addShape("rect")} disabled={pending}>
+            <Square className="h-5 w-5" />
+          </ShapePickBtn>
+          <ShapePickBtn label="Circle" onClick={() => addShape("circle")} disabled={pending}>
+            <Circle className="h-5 w-5" />
+          </ShapePickBtn>
+          <ShapePickBtn label="Blob" onClick={() => addShape("blob")} disabled={pending}>
+            <BlobIcon />
+          </ShapePickBtn>
+          <ShapePickBtn label="Triangle" onClick={() => addShape("triangle")} disabled={pending}>
+            <Triangle className="h-5 w-5" />
+          </ShapePickBtn>
+        </div>
+      </div>
+
+      <div className="border-t" />
+
+      {/* ── Stickers ── */}
+      <div className="space-y-2">
+        <SectionHeader icon={<Sparkles className="h-3.5 w-3.5" />}>Sticker</SectionHeader>
+        <div className="grid grid-cols-6 gap-1.5">
+          {STICKER_ICONS.map((icon) => (
+            <button
+              key={icon}
+              type="button"
+              onClick={() => addSticker(icon)}
+              disabled={pending}
+              title={icon}
+              className="h-9 w-9 rounded-md border bg-muted/40 hover:bg-muted disabled:opacity-50 flex items-center justify-center p-1.5"
+            >
+              <StickerGlyph icon={icon} color="currentColor" />
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="border-t" />
+
+      {/* ── Image ── */}
+      <div className="space-y-2">
+        <SectionHeader icon={<ImageIcon className="h-3.5 w-3.5" />}>Image</SectionHeader>
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/gif,image/webp"
+          className="hidden"
+          onChange={(e) => {
+            handleImageFile(e.target.files?.[0] ?? null);
+            e.target.value = "";
+          }}
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => imageInputRef.current?.click()}
+          disabled={pending}
+          className="w-full"
+        >
+          {pending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
+          Upload image
+        </Button>
+        <p className="text-[10px] text-muted-foreground">
+          PNG, JPG, GIF, WebP · up to 5MB. Mask the shape from the selected-element controls below.
+        </p>
+      </div>
+
       {hasSel && (
         <>
           <div className="border-t" />
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             <SectionHeader>
               {selectedIds.size === 1 ? "Selected" : `${selectedIds.size} selected`}
             </SectionHeader>
@@ -1073,6 +1210,16 @@ function SidePanel({
                 </div>
                 {selectedElement.rotation ? <div>rot · {Math.round(selectedElement.rotation)}°</div> : null}
               </div>
+            )}
+
+            {selectedElement?.type === "shape" && (
+              <ShapeInspector element={selectedElement} onPatchMeta={onPatchMeta} />
+            )}
+            {selectedElement?.type === "sticker" && (
+              <StickerInspector element={selectedElement} onPatchMeta={onPatchMeta} />
+            )}
+            {selectedElement?.type === "image" && (
+              <ImageInspector element={selectedElement} onPatchMeta={onPatchMeta} />
             )}
           </div>
         </>
@@ -1155,6 +1302,135 @@ async function readClipboardIds(): Promise<string[] | null> {
   } catch {
     return null;
   }
+}
+
+function ShapePickBtn({
+  children,
+  label,
+  onClick,
+  disabled,
+}: {
+  children: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      className="aspect-square rounded-md border bg-muted/40 hover:bg-muted disabled:opacity-50 flex items-center justify-center"
+    >
+      {children}
+    </button>
+  );
+}
+
+function BlobIcon() {
+  return (
+    <svg viewBox="0 0 100 100" className="h-5 w-5" fill="currentColor">
+      <path d="M 50 10 C 70 12, 88 28, 88 50 C 88 72, 70 90, 50 90 C 30 88, 14 72, 14 50 C 14 28, 30 12, 50 10 Z" />
+    </svg>
+  );
+}
+
+function ShapeInspector({
+  element,
+  onPatchMeta,
+}: {
+  element: Element;
+  onPatchMeta: (id: string, patch: Record<string, unknown>) => void;
+}) {
+  const meta = readShapeMeta(element.meta);
+  return (
+    <div className="space-y-1.5 rounded-md border p-2.5">
+      <label className="flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">Fill</span>
+        <input
+          type="color"
+          value={meta.fill}
+          onChange={(e) => onPatchMeta(element.id, { fill: e.target.value })}
+          className="h-6 w-10 cursor-pointer rounded border bg-transparent"
+        />
+      </label>
+      {meta.kind === "rect" && (
+        <label className="flex items-center justify-between gap-2 text-xs">
+          <span className="text-muted-foreground">Corner radius</span>
+          <input
+            type="range"
+            min={0}
+            max={50}
+            value={meta.radius}
+            onChange={(e) => onPatchMeta(element.id, { radius: Number(e.target.value) })}
+            className="flex-1 max-w-[120px]"
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
+function StickerInspector({
+  element,
+  onPatchMeta,
+}: {
+  element: Element;
+  onPatchMeta: (id: string, patch: Record<string, unknown>) => void;
+}) {
+  const meta = readStickerMeta(element.meta);
+  return (
+    <div className="space-y-1.5 rounded-md border p-2.5">
+      <label className="flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">Color</span>
+        <input
+          type="color"
+          value={meta.color}
+          onChange={(e) => onPatchMeta(element.id, { color: e.target.value })}
+          className="h-6 w-10 cursor-pointer rounded border bg-transparent"
+        />
+      </label>
+    </div>
+  );
+}
+
+function ImageInspector({
+  element,
+  onPatchMeta,
+}: {
+  element: Element;
+  onPatchMeta: (id: string, patch: Record<string, unknown>) => void;
+}) {
+  const meta = readImageMeta(element.meta);
+  if (!meta) return null;
+  return (
+    <div className="space-y-2 rounded-md border p-2.5">
+      <label className="block text-xs">
+        <span className="text-muted-foreground">Mask</span>
+        <select
+          value={meta.mask}
+          onChange={(e) => onPatchMeta(element.id, { mask: e.target.value as ImageMask })}
+          className="mt-1 w-full rounded-md border bg-background px-2 py-1 text-xs"
+        >
+          {IMAGE_MASKS.map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
+      </label>
+      <label className="flex items-center justify-between gap-2 text-xs">
+        <span className="text-muted-foreground">Fit</span>
+        <select
+          value={meta.fit}
+          onChange={(e) => onPatchMeta(element.id, { fit: e.target.value })}
+          className="rounded-md border bg-background px-2 py-1 text-xs"
+        >
+          <option value="cover">cover</option>
+          <option value="contain">contain</option>
+        </select>
+      </label>
+    </div>
+  );
 }
 
 function modKeyLabel(): string {

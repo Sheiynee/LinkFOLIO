@@ -21,6 +21,14 @@ import {
   type UserFontRecord,
 } from "@/lib/typography";
 import { BackgroundLayers } from "./background-layers";
+import { StickerGlyph } from "./sticker-glyph";
+import {
+  blobPath,
+  imageMaskClipPath,
+  readImageMeta,
+  readShapeMeta,
+  readStickerMeta,
+} from "@/lib/visual-elements";
 import { TwitchLiveWidget } from "./widgets/twitch-live-widget";
 import { TwitchVodWidget } from "./widgets/twitch-vod-widget";
 import { YouTubeChannelWidget } from "./widgets/youtube-channel-widget";
@@ -291,7 +299,99 @@ function ElementContent({
       />
     );
   }
+  if (element.type === "shape") {
+    return <ShapeElement element={element} />;
+  }
+  if (element.type === "sticker") {
+    return <StickerElement element={element} />;
+  }
+  if (element.type === "image") {
+    return <ImageElement element={element} />;
+  }
   return null;
+}
+
+function ShapeElement({ element }: { element: Element }) {
+  const meta = readShapeMeta(element.meta);
+  const strokeProps = meta.stroke
+    ? { stroke: meta.stroke, strokeWidth: meta.strokeWidth }
+    : undefined;
+
+  if (meta.kind === "rect") {
+    return (
+      <div
+        className="w-full h-full"
+        style={{
+          backgroundColor: meta.fill,
+          borderRadius: `${meta.radius}%`,
+          border: meta.stroke ? `${meta.strokeWidth}px solid ${meta.stroke}` : undefined,
+        }}
+      />
+    );
+  }
+  if (meta.kind === "circle") {
+    return (
+      <div
+        className="w-full h-full"
+        style={{
+          backgroundColor: meta.fill,
+          borderRadius: "50%",
+          border: meta.stroke ? `${meta.strokeWidth}px solid ${meta.stroke}` : undefined,
+        }}
+      />
+    );
+  }
+  if (meta.kind === "blob") {
+    return (
+      <svg viewBox="0 0 100 100" width="100%" height="100%" preserveAspectRatio="none">
+        <path d={blobPath(meta.seed)} fill={meta.fill} {...strokeProps} />
+      </svg>
+    );
+  }
+  if (meta.kind === "triangle") {
+    return (
+      <svg viewBox="0 0 100 100" width="100%" height="100%" preserveAspectRatio="none">
+        <polygon points="50,5 95,95 5,95" fill={meta.fill} {...strokeProps} />
+      </svg>
+    );
+  }
+  return null;
+}
+
+function StickerElement({ element }: { element: Element }) {
+  const meta = readStickerMeta(element.meta);
+  return (
+    <div className="w-full h-full flex items-center justify-center">
+      <StickerGlyph icon={meta.icon} color={meta.color} />
+    </div>
+  );
+}
+
+function ImageElement({ element }: { element: Element }) {
+  const meta = readImageMeta(element.meta);
+  if (!meta) return null;
+  const clipPath = imageMaskClipPath(meta.mask, element.id.charCodeAt(0) + element.id.charCodeAt(1));
+  return (
+    <div
+      className="w-full h-full overflow-hidden"
+      style={{
+        borderRadius: meta.mask === "rounded" ? 16 : undefined,
+        clipPath: clipPath ?? undefined,
+        WebkitClipPath: clipPath ?? undefined,
+      }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={meta.url}
+        alt=""
+        className="w-full h-full"
+        style={{
+          objectFit: meta.fit,
+          filter: meta.blur > 0 ? `blur(${meta.blur}px)` : undefined,
+        }}
+      />
+    </div>
+  );
 }
 
 function WidgetElement({

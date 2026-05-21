@@ -17,7 +17,15 @@ import type { BlockType } from "@/lib/blocks";
 import type { WidgetKind } from "@/lib/widgets/types";
 import { detectWidgetFromUrl } from "@/lib/widgets/detect";
 import { parseTipJarUrl } from "@/lib/widgets/tip-jar";
-import { DEFAULT_ELEMENT_HEIGHTS } from "@/lib/elements";
+import { DEFAULT_ELEMENT_HEIGHTS, DEFAULT_VISUAL_ELEMENT_SIZE } from "@/lib/elements";
+import {
+  defaultImageMeta,
+  defaultShapeMeta,
+  defaultStickerMeta,
+  type ImageMask,
+  type ShapeKind,
+  type StickerIcon,
+} from "@/lib/visual-elements";
 
 async function getUsernameForUser(userId: string): Promise<string | null> {
   const supabase = createAdminClient();
@@ -245,6 +253,107 @@ export async function createWidgetElementFromUrl(url: string) {
     meta: resolved.meta,
     h: DEFAULT_ELEMENT_HEIGHTS.widget,
   });
+}
+
+/** Create a shape element with sensible defaults for its kind. */
+export async function createShapeElement(kind: ShapeKind) {
+  const size = DEFAULT_VISUAL_ELEMENT_SIZE.shape;
+  return createElement({
+    type: "shape",
+    meta: defaultShapeMeta(kind) as unknown as Record<string, unknown>,
+    w: size.w,
+    h: size.h,
+  });
+}
+
+/** Create a sticker element. */
+export async function createStickerElement(icon: StickerIcon) {
+  const size = DEFAULT_VISUAL_ELEMENT_SIZE.sticker;
+  return createElement({
+    type: "sticker",
+    meta: defaultStickerMeta(icon) as unknown as Record<string, unknown>,
+    w: size.w,
+    h: size.h,
+  });
+}
+
+const MAX_ELEMENT_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
+const IMAGE_MAGIC_BYTES: Array<{ ext: string; bytes: number[]; offset?: number }> = [
+  { ext: "png", bytes: [0x89, 0x50, 0x4e, 0x47] },
+  { ext: "jpg", bytes: [0xff, 0xd8, 0xff] },
+  { ext: "gif", bytes: [0x47, 0x49, 0x46, 0x38] },
+  { ext: "webp", bytes: [0x57, 0x45, 0x42, 0x50], offset: 8 }, // after RIFF/size
+];
+
+function detectImageExt(buf: Uint8Array): string | null {
+  for (const sig of IMAGE_MAGIC_BYTES) {
+    const offset = sig.offset ?? 0;
+    if (buf.length < offset + sig.bytes.length) continue;
+    if (sig.bytes.every((b, i) => buf[offset + i] === b)) return sig.ext;
+  }
+  return null;
+}
+
+/**
+ * Upload a creator-supplied image and create an `image` element pointing at it.
+ * Magic-byte validation runs before the upload, so a renamed `.png` containing
+ * an executable can't sneak through. The file lands in the existing
+ * `backgrounds` bucket under `${userId}/element-images/` — same access rules,
+ * same RLS — to avoid spinning up another bucket grant.
+ */
+export async function uploadAndCreateImageElement(formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Not authenticated" };
+
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0) return { error: "No file selected" };
+  if (file.size > MAX_ELEMENT_IMAGE_BYTES) return { error: "Image must be under 5MB" };
+
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const ext = detectImageExt(buf);
+  if (!ext) return { error: "Unsupported image format (use PNG, JPG, GIF, or WebP)" };
+
+  const supabase = createAdminClient();
+  const path = `${session.user.id}/element-images/${Date.now()}.${ext}`;
+  const { error: uploadError } = await supabase.storage
+    .from("backgrounds")
+    .upload(path, file, { upsert: true, contentType: file.type || `image/${ext}` });
+  if (uploadError) return { error: uploadError.message };
+
+  const { data: { publicUrl } } = supabase.storage.from("backgrounds").getPublicUrl(path);
+  const size = DEFAULT_VISUAL_ELEMENT_SIZE.image;
+  return createElement({
+    type: "image",
+    meta: defaultImageMeta(publicUrl, path) as unknown as Record<string, unknown>,
+    w: size.w,
+    h: size.h,
+  });
+}
+
+/** Mutate the image element's mask without re-uploading. */
+export async function updateImageMask(id: string, mask: ImageMask) {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Not authenticated" };
+  const supabase = createAdminClient();
+
+  const { data: row } = await supabase
+    .from("elements")
+    .select("type, meta")
+    .eq("id", id)
+    .eq("user_id", session.user.id)
+    .single();
+  if (!row || row.type !== "image") return { error: "Not an image element" };
+
+  const meta = { ...(row.meta as Record<string, unknown> | null ?? {}), mask };
+  const { error } = await supabase
+    .from("elements")
+    .update({ meta })
+    .eq("id", id)
+    .eq("user_id", session.user.id);
+  if (error) return { error: error.message };
+
+  await revalidateUserPages(session.user.id);
+  return { ok: true };
 }
 
 export async function deleteElement(id: string) {

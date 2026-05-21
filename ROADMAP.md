@@ -199,7 +199,15 @@ Positioned elements live in a separate `elements` table that mirrors block conte
 - **Cross-tab paste** — `Ctrl/Cmd+C` writes a `linkfolio-canvas-clipboard:` JSON marker via `navigator.clipboard.writeText`; `Ctrl/Cmd+V` reads it back and falls through to the in-memory clipboard when the system clipboard is unavailable (insecure context, permission denied, foreign payload). Paste across tabs and after refresh now works because the IDs round-trip through the system clipboard and `duplicateElements` re-fetches them server-side under RLS.
 
 ### Phase 4 part 3 — Element library + smart assist
-- Shapes (rect, circle, blob), ornamental dividers, sticker set, image with crop/mask (circle, blob, polygon).
+
+**Visual elements (shipped):**
+- `ElementType` decoupled from `BlockType` — added canvas-only `shape`, `sticker`, `image` types backed by migration 12 (`12_canvas_visual_elements.sql` widens the `elements_type_check` constraint).
+- **Shape element** — rect, circle, blob, triangle. Rects render via border-radius (with a 0–50% corner slider), blob renders as a deterministic SVG path seeded per element so saves match previews, triangle is a fixed SVG polygon. Per-element fill color editable from the sidebar.
+- **Sticker element** — 24-icon curated lucide set (Star, Heart, Sparkles, Flame, Music, Gamepad2, …). One-click insert from a 6-column picker; per-element color editable.
+- **Image element** — upload PNG/JPG/GIF/WebP (≤5MB) into the existing `backgrounds` bucket under `${userId}/element-images/`, with magic-byte validation (rejects renamed binaries). Mask presets: none · circle · rounded · blob · hexagon · triangle, implemented with CSS `clip-path`; `object-fit` cover/contain toggle.
+- All three types are inert by default (no clicks, no hover, no widget fetches), so they're pure visual layers above the page composition.
+
+**Remaining in part 3:**
 - First-class Button element (replaces link block in canvas mode — same payload, canvas-positioned).
 - Per-section background (regions of the canvas with their own background layers).
 - "Magic arrange" heuristic + "Suggest layout" (3 arrangements: grid, asymmetric, hero-led). AI copy assist for bio/headings via Claude API. AI layout assist evaluated after the heuristic ships.
@@ -390,17 +398,18 @@ These come up often. Saying no is part of the strategy.
 | 09 | `09_user_fonts.sql` | `public.user_fonts` table + `fonts` storage bucket, RLS, public read |
 | 10 | `10_onboarding_flag.sql` | `profiles.onboarded_at` for onboarding re-run protection (backfilled for users with existing blocks) |
 | 11 | `11_canvas_elements.sql` | `elements` table (positioned canvas elements with widget support, RLS, updated_at trigger) + `profiles.layout_mode` flag |
+| 12 | `12_canvas_visual_elements.sql` | Widens `elements_type_check` with `'shape'`, `'sticker'`, `'image'` and re-asserts the widget_kind/type pairing rule for the new types |
 
 ### Planned migrations
 
 | # | Purpose | Phase |
 |---|---|---|
-| 12 | `theme_background_layers`: image/video/animated layers + asset validation tables | 5 |
-| 13 | `elements_mobile_overrides`: tighten mobile_* columns once Phase 4b auto-reflow lands | 4 |
-| 14 | `audit_log`, `user_storage`, rate-limit support tables | 5 |
-| 15 | `creator_live_status`: cached live state per creator with EventSub timestamps | 6 |
-| 16 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 |
-| 17 | `domains`: custom domain verification | 7 |
+| 13 | `theme_background_layers`: image/video/animated layers + asset validation tables | 5 |
+| 14 | `elements_mobile_overrides`: tighten mobile_* columns once Phase 4b auto-reflow lands | 4 |
+| 15 | `audit_log`, `user_storage`, rate-limit support tables | 5 |
+| 16 | `creator_live_status`: cached live state per creator with EventSub timestamps | 6 |
+| 17 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 |
+| 18 | `domains`: custom domain verification | 7 |
 
 Run migrations in order in Supabase SQL Editor. Each is idempotent.
 
