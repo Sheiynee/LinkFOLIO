@@ -47,12 +47,10 @@ import {
   deleteElement,
   deleteElements,
   duplicateElements,
-  improveCopyForElement,
   updateElement,
   updateMobilePlacements,
   uploadAndCreateImageElement,
 } from "./actions";
-import { COPY_INTENTS, type CopyIntent } from "@/lib/ai-copy";
 import {
   BUTTON_ICONS,
   BUTTON_VARIANTS,
@@ -674,33 +672,6 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
     });
   }
 
-  // ─── AI copy assist ───────────────────────────────────────
-  const [aiPending, setAiPending] = useState(false);
-  async function improveCopy(id: string, intent: CopyIntent) {
-    setAiPending(true);
-    history.push(elementsRef.current);
-    try {
-      const res = await improveCopyForElement(id, intent);
-      if (res.error) {
-        setError(res.error);
-        return;
-      }
-      const next = res.text;
-      if (!next) return;
-      setElements((es) =>
-        es.map((e) => {
-          if (e.id !== id) return e;
-          if (e.type === "heading") {
-            return e.title != null ? { ...e, title: next } : { ...e, content: next };
-          }
-          return { ...e, content: next };
-        })
-      );
-    } finally {
-      setAiPending(false);
-    }
-  }
-
   // ─── Magic arrange ────────────────────────────────────────
   function applyMagicArrange(kind: ArrangeKind) {
     const patches = arrange(kind, elementsRef.current);
@@ -885,8 +856,6 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
             onError={setError}
             onPatchMeta={patchMeta}
             onMagicArrange={applyMagicArrange}
-            onImproveCopy={improveCopy}
-            aiPending={aiPending}
           />
         </div>
       </div>
@@ -968,8 +937,6 @@ function SidePanel({
   onError,
   onPatchMeta,
   onMagicArrange,
-  onImproveCopy,
-  aiPending,
 }: {
   selectedIds: Set<string>;
   selectedElement: Element | null;
@@ -987,8 +954,6 @@ function SidePanel({
   onError: (msg: string) => void;
   onPatchMeta: (id: string, patch: Record<string, unknown>) => void;
   onMagicArrange: (kind: ArrangeKind) => void;
-  onImproveCopy: (id: string, intent: CopyIntent) => void;
-  aiPending: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [linkTitle, setLinkTitle] = useState("");
@@ -1342,13 +1307,6 @@ function SidePanel({
             {selectedElement?.type === "region" && (
               <RegionInspector element={selectedElement} onPatchMeta={onPatchMeta} />
             )}
-            {selectedElement && (selectedElement.type === "text" || selectedElement.type === "heading") && (
-              <AiCopyInspector
-                element={selectedElement}
-                pending={aiPending}
-                onImprove={onImproveCopy}
-              />
-            )}
           </div>
         </>
       )}
@@ -1580,43 +1538,6 @@ function StickerInspector({
           className="h-6 w-10 cursor-pointer rounded border bg-transparent"
         />
       </label>
-    </div>
-  );
-}
-
-function AiCopyInspector({
-  element,
-  pending,
-  onImprove,
-}: {
-  element: Element;
-  pending: boolean;
-  onImprove: (id: string, intent: CopyIntent) => void;
-}) {
-  return (
-    <div className="space-y-1.5 rounded-md border p-2.5">
-      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-        <Sparkles className="h-3.5 w-3.5" />
-        <span>AI copy assist</span>
-      </div>
-      <div className="grid grid-cols-2 gap-1">
-        {COPY_INTENTS.map((intent) => (
-          <Button
-            key={intent}
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => onImprove(element.id, intent)}
-            disabled={pending}
-            className="h-7 text-[10px] capitalize"
-          >
-            {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : intent}
-          </Button>
-        ))}
-      </div>
-      <p className="text-[10px] text-muted-foreground">
-        Needs <code className="font-mono">ANTHROPIC_API_KEY</code> on the server.
-      </p>
     </div>
   );
 }

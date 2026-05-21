@@ -221,11 +221,7 @@ Positioned elements live in a separate `elements` table that mirrors block conte
 - Sidebar "Arrange" cluster has three one-click buttons (Wand2 for grid, ASYM, HERO). Application uses the existing `batchUpdateElements` round trip with an undo snapshot — so Cmd+Z reverts a magic arrange.
 - Region elements are excluded from arrangement (they're backdrops, not flow content); element aspect ratios are preserved.
 
-**AI copy assist (shipped):**
-- `improveCopyForElement` server action (in [actions.ts](src/app/dashboard/canvas/actions.ts)) calls Claude Sonnet 4.6 via `@anthropic-ai/sdk` with an ephemeral-cached system prompt, dynamic-imported so the SDK never ships to the client and stays out of bundles for users who don't trigger it.
-- Five intents — improve · shorter · longer · punchier · friendlier — surface as a 2-column button cluster on selected `text` / `heading` elements. The selected element's content is rewritten in-place with an undo snapshot.
-- Gated on `ANTHROPIC_API_KEY`; when unset the action returns a friendly "needs ANTHROPIC_API_KEY" error instead of crashing. Constants + system prompt live in [lib/ai-copy.ts](src/lib/ai-copy.ts) so the `"use server"` actions file only exports async functions (Next.js requirement).
-- AI **layout** assist (per roadmap) stays deferred — the heuristic is shipping first; revisit AI layout after it lives in production for a while.
+**AI copy/layout assist — not built.** Originally scoped for Phase 4 part 3 but skipped: requires an Anthropic API account + key, and the maintainer doesn't want that dependency. Easy to add later — the magic-arrange heuristic that shipped is the deterministic baseline; an AI layout pass could read the same canvas and propose alternatives if it's ever wanted. AI copy assist (rewrite a bio or heading) would be a single Claude Messages call gated on `ANTHROPIC_API_KEY`.
 
 ---
 

@@ -27,7 +27,6 @@ import {
   type ShapeKind,
   type StickerIcon,
 } from "@/lib/visual-elements";
-import { COPY_INTENT_DESCRIPTION, COPY_SYSTEM_PROMPT, type CopyIntent } from "@/lib/ai-copy";
 
 async function getUsernameForUser(userId: string): Promise<string | null> {
   const supabase = createAdminClient();
@@ -367,86 +366,7 @@ export async function updateImageMask(id: string, mask: ImageMask) {
 
   await revalidateUserPages(session.user.id);
   return { ok: true };
-}
-
-
-
-/**
- * Rewrite an element's text via Claude. Only operates on `text` (bio-style)
- * and `heading` elements; everything else is a no-op. The action is gated on
- * `ANTHROPIC_API_KEY` — when unset the editor still surfaces the button but
- * gets a friendly "needs API key" error instead of a crash.
- */
-export async function improveCopyForElement(id: string, intent: CopyIntent) {
-  const session = await auth();
-  if (!session?.user?.id) return { error: "Not authenticated" };
-
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return { error: "AI copy assist needs ANTHROPIC_API_KEY set on the server." };
-  }
-
-  const supabase = createAdminClient();
-  const { data: el } = await supabase
-    .from("elements")
-    .select("type, content, title")
-    .eq("id", id)
-    .eq("user_id", session.user.id)
-    .single();
-  if (!el) return { error: "Element not found" };
-
-  const isHeading = el.type === "heading";
-  const original = isHeading ? (el.title ?? el.content ?? "") : (el.content ?? "");
-  if (!original.trim()) return { error: "Nothing to rewrite" };
-
-  const description = COPY_INTENT_DESCRIPTION[intent] ?? COPY_INTENT_DESCRIPTION.improve;
-
-  // Lazy import so the dashboard page doesn't bundle the SDK for users who
-  // never trigger the AI button.
-  const { default: Anthropic } = await import("@anthropic-ai/sdk");
-  const client = new Anthropic({ apiKey });
-
-  let rewritten: string;
-  try {
-    const msg = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 400,
-      system: [
-        { type: "text", text: COPY_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
-      ],
-      messages: [
-        {
-          role: "user",
-          content: `Task: ${description}\nText kind: ${isHeading ? "heading" : "bio/text"}\n\nOriginal:\n${original}`,
-        },
-      ],
-    });
-    const block = msg.content.find((c) => c.type === "text");
-    rewritten = block && block.type === "text" ? block.text.trim() : "";
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Claude request failed";
-    return { error: msg };
-  }
-  if (!rewritten) return { error: "Empty response from Claude" };
-
-  // Heading content lives in `content` historically (see ElementContent
-  // renderer) so write to the same field we read from.
-  const patch = isHeading
-    ? (el.title != null ? { title: rewritten } : { content: rewritten })
-    : { content: rewritten };
-
-  const { error } = await supabase
-    .from("elements")
-    .update(patch)
-    .eq("id", id)
-    .eq("user_id", session.user.id);
-  if (error) return { error: error.message };
-
-  await revalidateUserPages(session.user.id);
-  return { ok: true, text: rewritten };
-}
-
-export async function deleteElement(id: string) {
+}export async function deleteElement(id: string) {
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated" };
 
