@@ -43,6 +43,7 @@ import {
   createRegionElement,
   createShapeElement,
   createStickerElement,
+  createWidgetElementByKind,
   createWidgetElementFromUrl,
   deleteElement,
   deleteElements,
@@ -51,6 +52,9 @@ import {
   updateMobilePlacements,
   uploadAndCreateImageElement,
 } from "./actions";
+import { WIDGET_PICKER_SPECS } from "@/lib/widgets/resolve";
+import type { WidgetKind } from "@/lib/widgets/types";
+import { Textarea } from "@/components/ui/textarea";
 import {
   BUTTON_ICONS,
   BUTTON_VARIANTS,
@@ -654,6 +658,22 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
     });
   }
 
+  /**
+   * Update the text columns (`title`, `content`) on a selected element.
+   * Used by the inline editor for text / heading / link elements.
+   * Goes through `updateElement` which also sanitizes the strings server-side.
+   */
+  function patchFields(id: string, patch: { title?: string | null; content?: string | null }) {
+    history.push(elementsRef.current);
+    setElements((es) =>
+      es.map((e) => (e.id === id ? { ...e, ...patch } : e))
+    );
+    startTransition(async () => {
+      const res = await updateElement(id, patch);
+      if (res.error) setError(res.error);
+    });
+  }
+
   /** Patch an element's meta jsonb both locally and on the server. */
   function patchMeta(id: string, patch: Record<string, unknown>) {
     history.push(elementsRef.current);
@@ -855,6 +875,7 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
             onAdded={pushAdded}
             onError={setError}
             onPatchMeta={patchMeta}
+            onPatchFields={patchFields}
             onMagicArrange={applyMagicArrange}
           />
         </div>
@@ -936,6 +957,7 @@ function SidePanel({
   onAdded,
   onError,
   onPatchMeta,
+  onPatchFields,
   onMagicArrange,
 }: {
   selectedIds: Set<string>;
@@ -953,6 +975,7 @@ function SidePanel({
   onAdded: (el: Element) => void;
   onError: (msg: string) => void;
   onPatchMeta: (id: string, patch: Record<string, unknown>) => void;
+  onPatchFields: (id: string, patch: { title?: string | null; content?: string | null }) => void;
   onMagicArrange: (kind: ArrangeKind) => void;
 }) {
   const [pending, startTransition] = useTransition();
@@ -1001,6 +1024,26 @@ function SidePanel({
       else if (res.element) {
         onAdded(res.element as Element);
         setWidgetUrl("");
+      }
+    });
+  }
+
+  const [widgetKind, setWidgetKind] = useState<WidgetKind>("twitch_live");
+  const [widgetKindInput, setWidgetKindInput] = useState("");
+  const widgetSpec = WIDGET_PICKER_SPECS.find((s) => s.kind === widgetKind) ?? WIDGET_PICKER_SPECS[0];
+
+  function addWidgetByKind() {
+    const input = widgetKindInput.trim();
+    if (!input) {
+      onError("Fill in the widget input");
+      return;
+    }
+    startTransition(async () => {
+      const res = await createWidgetElementByKind(widgetKind, input);
+      if (res.error) onError(res.error);
+      else if (res.element) {
+        onAdded(res.element as Element);
+        setWidgetKindInput("");
       }
     });
   }
@@ -1170,8 +1213,37 @@ function SidePanel({
           onKeyDown={(e) => { if (e.key === "Enter") addWidget(); }}
         />
         <Button type="button" size="sm" onClick={addWidget} disabled={pending} className="w-full">
-          <Plus className="h-4 w-4 mr-1" /> Add widget
+          <Plus className="h-4 w-4 mr-1" /> Auto-detect + add
         </Button>
+
+        <div className="pt-2 border-t border-dashed border-border/40 space-y-2">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Or pick a kind</p>
+          <select
+            value={widgetKind}
+            onChange={(e) => setWidgetKind(e.target.value as WidgetKind)}
+            className="w-full rounded-md border bg-background px-2 py-1.5 text-xs"
+          >
+            {WIDGET_PICKER_SPECS.map((spec) => (
+              <option key={spec.kind} value={spec.kind}>{spec.label}</option>
+            ))}
+          </select>
+          <Input
+            placeholder={widgetSpec.placeholder}
+            value={widgetKindInput}
+            onChange={(e) => setWidgetKindInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") addWidgetByKind(); }}
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={addWidgetByKind}
+            disabled={pending}
+            className="w-full"
+          >
+            <Plus className="h-4 w-4 mr-1" /> Add {widgetSpec.label.toLowerCase()}
+          </Button>
+        </div>
       </div>
 
       <div className="border-t" />
@@ -1291,6 +1363,12 @@ function SidePanel({
               </div>
             )}
 
+            {selectedElement && (selectedElement.type === "text" || selectedElement.type === "heading") && (
+              <ContentInspector element={selectedElement} onPatchFields={onPatchFields} />
+            )}
+            {selectedElement?.type === "link" && (
+              <LinkInspector element={selectedElement} onPatchFields={onPatchFields} />
+            )}
             {selectedElement?.type === "link" && (
               <ButtonInspector element={selectedElement} onPatchMeta={onPatchMeta} />
             )}
@@ -1418,6 +1496,74 @@ function BlobIcon() {
     <svg viewBox="0 0 100 100" className="h-5 w-5" fill="currentColor">
       <path d="M 50 10 C 70 12, 88 28, 88 50 C 88 72, 70 90, 50 90 C 30 88, 14 72, 14 50 C 14 28, 30 12, 50 10 Z" />
     </svg>
+  );
+}
+
+function ContentInspector({
+  element,
+  onPatchFields,
+}: {
+  element: Element;
+  onPatchFields: (id: string, patch: { content?: string | null }) => void;
+}) {
+  // Local mirror so typing feels instant; commit on blur to avoid flooding
+  // the server with one update per keystroke.
+  const [draft, setDraft] = useState(element.content ?? "");
+  useEffect(() => { setDraft(element.content ?? ""); }, [element.id, element.content]);
+
+  function commit() {
+    const next = draft.trim() === "" ? null : draft;
+    if (next !== (element.content ?? null)) onPatchFields(element.id, { content: next });
+  }
+
+  return (
+    <div className="space-y-1.5 rounded-md border p-2.5">
+      <span className="block text-xs text-muted-foreground">
+        {element.type === "heading" ? "Heading text" : "Text content"}
+      </span>
+      <Textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        rows={element.type === "heading" ? 2 : 4}
+        placeholder={element.type === "heading" ? "Heading" : "Some text here"}
+        className="text-sm"
+      />
+      <p className="text-[10px] text-muted-foreground">Saves on blur · ⌘Z still works.</p>
+    </div>
+  );
+}
+
+function LinkInspector({
+  element,
+  onPatchFields,
+}: {
+  element: Element;
+  onPatchFields: (id: string, patch: { title?: string | null; content?: string | null }) => void;
+}) {
+  const [draft, setDraft] = useState(element.title ?? "");
+  useEffect(() => { setDraft(element.title ?? ""); }, [element.id, element.title]);
+
+  function commit() {
+    const next = draft.trim() === "" ? null : draft;
+    if (next !== (element.title ?? null)) onPatchFields(element.id, { title: next });
+  }
+
+  return (
+    <div className="space-y-1.5 rounded-md border p-2.5">
+      <span className="block text-xs text-muted-foreground">Label</span>
+      <Input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        placeholder="Visit my site"
+      />
+      {element.url && (
+        <p className="text-[10px] text-muted-foreground truncate" title={element.url}>
+          → {element.url}
+        </p>
+      )}
+    </div>
   );
 }
 

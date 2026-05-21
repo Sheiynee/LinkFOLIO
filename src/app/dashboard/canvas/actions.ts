@@ -17,6 +17,7 @@ import type { BlockType } from "@/lib/blocks";
 import type { WidgetKind } from "@/lib/widgets/types";
 import { detectWidgetFromUrl } from "@/lib/widgets/detect";
 import { parseTipJarUrl } from "@/lib/widgets/tip-jar";
+import { resolveWidget } from "@/lib/widgets/resolve";
 import { DEFAULT_ELEMENT_HEIGHTS, DEFAULT_VISUAL_ELEMENT_SIZE } from "@/lib/elements";
 import {
   defaultImageMeta,
@@ -234,6 +235,8 @@ export async function updateElement(id: string, patch: ElementPatch) {
     if (!v.ok) return { error: v.reason };
     clean.url = v.url;
   }
+  if (typeof clean.title === "string") clean.title = sanitizeShortText(clean.title);
+  if (typeof clean.content === "string") clean.content = sanitizeMultilineText(clean.content);
 
   const supabase = createAdminClient();
   const { error } = await supabase
@@ -277,6 +280,58 @@ export async function createWidgetElementFromUrl(url: string) {
     meta: resolved.meta,
     h: DEFAULT_ELEMENT_HEIGHTS.widget,
   });
+}
+
+/**
+ * Create a widget element from a specific kind + input (channel name, URL,
+ * handle, etc.) — used by the canvas-mode picker for users who want a
+ * named widget rather than relying on URL auto-detection.
+ */
+export async function createWidgetElementByKind(kind: WidgetKind, input: string) {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Not authenticated" };
+
+  const resolved = resolveWidget(kind, input);
+  if ("error" in resolved) return { error: resolved.error };
+
+  return createElement({
+    type: "widget",
+    widget_kind: resolved.kind as WidgetKind,
+    title: resolved.title,
+    meta: resolved.meta,
+    h: DEFAULT_ELEMENT_HEIGHTS.widget,
+  });
+}
+
+/**
+ * Re-source an existing widget element with a new input. Same shape as
+ * `updateWidgetBlock` for stack mode.
+ */
+export async function updateWidgetElement({ id, input }: { id: string; input: string }) {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Not authenticated" };
+
+  const supabase = createAdminClient();
+  const { data: existing } = await supabase
+    .from("elements")
+    .select("id, widget_kind")
+    .eq("id", id)
+    .eq("user_id", session.user.id)
+    .single();
+  if (!existing || !existing.widget_kind) return { error: "Not found" };
+
+  const resolved = resolveWidget(existing.widget_kind as WidgetKind, input);
+  if ("error" in resolved) return { error: resolved.error };
+
+  const { error } = await supabase
+    .from("elements")
+    .update({ meta: resolved.meta, title: resolved.title })
+    .eq("id", id)
+    .eq("user_id", session.user.id);
+  if (error) return { error: error.message };
+
+  await revalidateUserPages(session.user.id);
+  return { ok: true, meta: resolved.meta, title: resolved.title };
 }
 
 /** Create a region element pre-filled with a soft gradient. */
