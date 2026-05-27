@@ -28,15 +28,17 @@ Target users, in order: Twitch streamers → YouTubers / video creators → musi
 - Auto-profile creation on first sign-in (SQL trigger)
 - Auto-link on first sign-in (Google → `mailto:`, GitHub → profile URL)
 - 30-day session cookie
+- **Connected accounts panel** — settings page shows which OAuth providers are linked; "Connect" button links a second provider to the same account via NextAuth
 
 ### Profile
 - Username (live availability check, debounced)
 - Display name, bio
 - Avatar upload to Supabase Storage (`avatars` bucket, ≤2MB)
+- **Verified creator badge** — `profiles.verified` flag (set by admin via SQL); blue checkmark displayed on public page, OG image, and Story card
 
 ### Public page (`/{username}`)
-- Theme-aware rendering
-- 404 for unknown usernames
+- Theme-aware rendering (stack and canvas modes)
+- 404 for unknown usernames and soft-deleted profiles
 - Bot-filtered analytics
 - Always fresh (force-dynamic)
 
@@ -56,10 +58,16 @@ Target users, in order: Twitch streamers → YouTubers / video creators → musi
 - Stored as `jsonb` in `profiles.theme`
 
 ### Analytics
-- Page views written from `/{username}` SSR
-- Click tracking via `/r/{block_id}` redirect endpoint
+- Page views written from `/{username}` SSR; click tracking via `/r/{block_id}` redirect endpoint
 - Bot user-agent filter (Googlebot, Slackbot, etc.)
-- Dashboard stat cards (total views, total clicks)
+- **`/dashboard/analytics`** — full analytics dashboard (Phase 6 shipped):
+  - AreaChart: page views over time
+  - BarChart: top referrers (domain-level) + top countries
+  - Table: per-block click breakdown
+  - Time range tabs: 7d / 30d / 90d / All
+  - CSV export via `/api/analytics/export?days=N`
+  - Materialized views (`mv_page_views_daily` + `mv_block_clicks_daily`) refresh every 5 minutes via pg_cron
+  - Dashboard home stat cards link through to `/dashboard/analytics`
 
 ### Dashboard
 - Onboarding checklist
@@ -70,264 +78,272 @@ Target users, in order: Twitch streamers → YouTubers / video creators → musi
 ### Creator widgets (Phase 1 shipped in full)
 - New block kind `widget` with `widget_kind` enum + `meta jsonb` config
 - Server-side fetch with per-kind cache windows (30s–1h depending on liveness)
-- Theme-aware rendering — every widget inherits the page's palette via inline styles, brand identity preserved through icon + small `tag` chip
+- Theme-aware rendering — every widget inherits the page's palette via inline styles
 - Pre-fetch all widget data in parallel before rendering the public page
 - Provider token cache table (`app_tokens`) for the Twitch app access token
-- **Inline widget edit** — pencil icon prefills the existing handle/URL and lets you swap the source
-- **Optimistic UI** — `createWidgetBlock` returns the resolved kind/meta/title so the new dashboard row shows its real label immediately
-- **Tab-focus revalidation** — pages with a live widget call `router.refresh()` when the tab returns to focus after >30s of being hidden
-- **Theme-editor previews** — preview pane on `/dashboard/theme` pre-fetches widget data server-side, so widgets render with real data instead of "not found" placeholders
-- **Size variants** — every widget supports `compact` (one-line pill), `default`, and `featured` (with hero image where applicable). Per-block toggle in the editor.
-- **"Updated Xm ago" freshness indicator** on Twitch live, Twitch VOD, and YouTube live widgets, client-side auto-ticking every 30s
-- **13 widget kinds live**:
-  - **Twitch live status** — pulsing badge, viewers, game (30s revalidate)
-  - **Twitch latest VOD** — thumbnail + view count + time-ago (5m); handles fresh "still-processing" VODs with a clean fallback
+- **Inline widget edit**, **optimistic UI**, **tab-focus revalidation**, **size variants** (compact/default/featured)
+- **"Updated Xm ago" freshness indicator** on Twitch live, Twitch VOD, and YouTube live widgets
+- **15 widget kinds live**:
+  - **Twitch live status** — pulsing badge, viewers, game (EventSub-driven + 30s Helix fallback)
+  - **Twitch latest VOD** — thumbnail + view count + time-ago (5m)
   - **YouTube channel** — subscriber + video count (1h)
   - **YouTube latest video** — thumbnail, title, view count, time-ago (5m)
-  - **YouTube live status** — pulsing LIVE badge when broadcasting (1m); uses uploads-playlist + videos.list (3 quota units) instead of search.list (100 units)
+  - **YouTube live status** — pulsing LIVE badge when broadcasting (1m)
   - **GitHub repo** — stars, forks, language, description (10m)
   - **GitHub user** — followers + public repo count (30m)
   - **Discord invite** — member + online count (5m)
   - **Spotify embed** — real iframe player for track/album/artist/playlist/episode/show
   - **TikTok video** — branded gradient card linking out
   - **Tip jar** — Ko-fi, Buy Me a Coffee, Patreon, Streamlabs (deep links with brand colors)
-  - **Generic OG card** — `<meta property="og:*">` scrape for any URL, with SSRF protection (DNS pre-resolution, private-IP rejection, 5s timeout, 512KB body cap, content-type filter)
+  - **Generic OG card** — `<meta property="og:*">` scrape for any URL, with SSRF protection
+  - **Stream schedule** — weekly recurring schedule with timezone; "Add to calendar" button; `/api/ical/{username}` generates a subscribable ICS feed with `RRULE:FREQ=WEEKLY`
+  - **Cross-promotion** — branded gradient CTA cards; detects platform from pasted URL (Twitch, YouTube, TikTok, Instagram, Twitter/X, Spotify artist)
 
 ### URL auto-detect on paste
-- One paste-any-URL widget option resolves to the right widget kind + metadata
-- Detects: `twitch.tv/{user}`, `youtube.com/@handle`, `youtube.com/channel/UC…`, `youtube.com/watch?v=…`, `youtu.be/…`, `youtube.com/shorts/…`, `github.com/owner`, `github.com/owner/repo`, `discord.gg/x`, `open.spotify.com/{type}/{id}`, `spotify:` URIs, `tiktok.com/@user/video/…`, `ko-fi/buymeacoffee/patreon/streamlabs.com/x`, and any other valid http(s) URL as a generic OG card fallback
+- Detects all major platforms + cross-promo URLs + any valid http(s) URL as a generic OG card fallback
 
-### Onboarding archetype flow (Phase 2 shipped in full)
-Four-step flow at `/onboarding` delivers the 90-second-to-shareable-page promise:
-1. **Archetype picker** — Streamer · YouTuber · Musician · Podcaster · Visual Artist · Game Dev · Other. Each archetype declares a default theme preset and which platform inputs to surface in step 2.
-2. **Platform URL paste** — one input per archetype-relevant platform. Each non-empty URL runs through `detectWidgetFromUrl` and auto-creates the matching widget block. **Dedupes against existing widgets on re-run** (stable identity key per widget kind).
-3. **Brand color seed** — 8 swatches + native color picker with live gradient preview. Backend derives bg gradient layer + accent + muted colors via HSL transforms in `lib/palette.ts`.
-4. **Typography pairing** — 12 curated pairings (`lib/type-pairings.ts`) → sets all 5 typography roles. Examples: Editorial · Tech · Modernist · Soft · Serif Classic · Mono Forward · Display Wide · Handwritten · Brutalist · Magazine · Y2K · Playful.
-
-Each step is skippable; Back navigates without losing state. Dashboard surfaces a "Quick start" card for users with zero blocks.
-
-**Phase 2 polish (shipped):**
-- **Re-run protection** — `profiles.onboarded_at` flag set on finish; `/onboarding` shows a "you've already done this" guard with a "Re-run setup" escape hatch (`?rerun=1`). Step 2 also dedupes widgets against the user's existing set on every run.
-- **5-role typography pairings** — every pairing now populates `display`, `heading`, `body`, `ui`, `mono` roles via `pairing.roles: ThemeTypography`.
-- **Skip-all fallback** — `applySkipAllDefaults(archetype)` runs on finish if all post-archetype steps were skipped, so the dashboard never lands on a wholly default page.
+### Onboarding archetype flow (Phase 2 shipped)
+- 4-step flow: Archetype picker → Platform URL paste → Brand color seed → Typography pairing
+- Each step skippable; re-run protection (`profiles.onboarded_at`); skip-all fallback
 
 ### Typography subsystem (Phase 3 shipped)
-- 5-role schema: `theme.typography = { display, heading, body, ui, mono }`. Each role: `{ family, source: 'google'|'curated'|'user_font', weight?, lineHeight?, letterSpacing? }`.
-- Per-role picker tiles in the theme editor (previews live in the actual font), reused across onboarding and dashboard.
-- **Custom font upload** — `fonts` storage bucket, `user_fonts(id, user_id, family_name, weight, style, url, storage_path, size_bytes, created_at)` table. WOFF2 only, magic-byte (`wOF2`) check, ≤1MB per file, 5MB total per user. Family name sanitized for safe CSS interpolation.
-- `@font-face` declarations injected into the public page on demand — only fonts actually referenced by the theme or per-element overrides get loaded.
-- **Per-element override** — blocks can carry `meta.typography?: Partial<TypographyRole>` and the renderer merges it over the role default (escape hatch for "this one heading uses a different font").
-- OG image route resolves typography roles best-effort (satori is system-font for now).
+- 5-role schema: display, heading, body, ui, mono
+- Custom font upload (WOFF2, ≤1MB/file, 5MB total)
+- Per-element typography override
+- `@font-face` injected on demand for public page
 
-### Backgrounds subsystem (Phase 3 shipped, image+animated layers deferred)
-- `theme.background = { layers: BgLayer[] }`. Layers stack in z-order. Each layer has `id` + optional `visible`.
-- **Gradient layer** — multi-stop (2–5), custom angle 0–360°. Editor lets you add/remove stops + drag positions.
-- **Mesh layer** — up to 4 absolutely-positioned radial blobs with shared blur. Each blob: `{ x, y, color, size, blur }`.
-- **Pattern layer** — 10 SVG patterns (dots, horizontal/diagonal lines, grid, grid paper, topographic, isometric, hexagons, checks, crosshatch) with color, scale, opacity.
-- **Image layer** — upload to the existing `backgrounds` bucket (≤5MB), then tune opacity, blur (0–60px), fit (cover/contain), and CSS `mix-blend-mode` (normal/multiply/screen/overlay/soft-light/luminosity) without re-uploading.
-- Editor supports reorder, per-layer visibility toggle, per-layer preview chip, delete.
-- Video + animated layers ship in Phase 5 (security hardening pass for asset uploads).
+### Backgrounds subsystem (Phase 3 + Phase 5 shipped)
+- Gradient · Mesh · Pattern · Image · Animated (drift/noise/particles) · Video layers
+- `prefers-reduced-motion` respected across all animated types
+- Per-section backgrounds via canvas `region` elements
 
-### Auto-generated OG images
-- `/api/og/[username]` runs on Node runtime via `next/og`; pulls avatar, display name, handle, bio, and brand palette into a themed 1200×630 share card
-- Wired into `og:image` + Twitter `summary_large_image` so links unfurl in Discord / Slack / LinkedIn / Facebook
-- `metadataBase` derived from `NEXT_PUBLIC_SITE_URL` or `VERCEL_PROJECT_PRODUCTION_URL` for absolute URLs
+### OG images (Phase 3 + Phase 5 + Phase 6 shipped)
+- `/api/og/[username]` — 1200×630 share card with avatar, name, bio, brand palette
+- **Live-now badge** — red `● LIVE` pill renders when any linked Twitch channel is currently live (reads `creator_live_status`)
+- **Verified checkmark** — shown inline with name when `profiles.verified = true`
+- **Instagram Story card** — `/api/og/[username]/story` — 1080×1920 vertical layout; dashboard "Story" button downloads PNG or opens Instagram
 
-### Infrastructure
-- All SQL migrations in `supabase/*.sql` (01–10)
-- Server actions for every mutation
-- `revalidatePath` wired so dashboard + public page stay in sync
-- `.gitattributes` normalizes line endings to LF
+### Canvas editor (Phase 4 shipped)
+- Opt-in via `profiles.layout_mode = 'canvas'`; existing stack pages untouched
+- Free-positioned elements: link · text · heading · divider · widget · shape · sticker · image · region
+- Resize (8-way handles), rotation (shift = 15° snap), snap-to-grid (8px), alignment guides, multi-select
+- Undo/redo (50-entry stack), copy/paste (cross-tab via system clipboard), duplicate
+- Group operations: align left/center/right/top/middle/bottom, distribute horizontal/vertical
+- Magic arrange: Grid / Asymmetric / Hero heuristics
+- Mobile reflow + per-element mobile overrides; editor mobile responsiveness
+- All 15 widget kinds supported in canvas mode
+
+### Twitch EventSub (Phase 6 shipped)
+- `/api/webhooks/twitch` — HMAC-SHA256 verified, replay-guarded webhook endpoint
+- `creator_live_status` table written on `stream.online`/`stream.offline` events
+- `twitch_eventsub_subscriptions` registry for idempotency
+- Auto-subscribes when a `twitch_live` widget is created (stack or canvas)
+- `getTwitchLiveStatus` reads cache first (2-min freshness window) before falling back to Helix API
+- Graceful fallback: if cache is stale/missing, Helix polling continues and back-fills the cache
+
+### Sharing & SEO (Phase 5 shipped)
+- Web Share API + QR modal (`<ShareButton>`)
+- `robots.txt` — public profiles crawlable, dashboard/auth/api blocked
+- `sitemap.xml` — landing page + legal pages + all active profiles (up to 10k)
+- Story share modal — download PNG + deep-link to Instagram app
+
+### Security & hardening (Phase 5 shipped)
+- Reserved usernames denylist (40 entries)
+- Storage quotas (50 MB/user), magic-byte validation on all uploads
+- Rate limiting (Postgres-backed sliding window): redirects 60/min/IP, uploads 10/min/user
+- URL allow/block list: rejects private IPs, RFC1918, dangerous schemes
+- Input sanitization: NFKC normalize, strip C0/C1 controls, zero-width, bidi-override
+- Audit log (IP hashed with salt): auth, deletion, export, rate-limit hits, URL rejections
+
+### Compliance (Phase 5 shipped)
+- Soft delete with 30-day grace period; daily hard-delete cron
+- GDPR data export (JSON dump of all user data)
+- Terms of Service + Privacy Policy at `/legal/*`
+
+### Performance (Phase 5 shipped)
+- Static landing page (`force-static`); middleware handles logged-in redirect
+- Edge runtime on `/r/{id}` — sub-100ms global redirects
+- Preconnect + dns-prefetch to Supabase storage origin
+- Bundle analyzer (`npm run analyze`)
+- Materialized analytics views with 5-min pg_cron refresh
+
+### Account management (Phase 6 — partial)
+- **Connected accounts** — link Google + GitHub to the same account from settings ✅
+- **Change email** — backend infrastructure (tokens table, verify route, Resend helper) built; UI deferred until Resend sending domain is set up
+- **Email digest opt-in** — backend infrastructure built; cron job ready; UI deferred until Resend sending domain is set up
 
 ---
 
-## 🟠 Phase 3 follow-ups (deferred)
+## 🟡 Phase 6 — Deferred items
 
-Phase 3 shipped typography (5 roles + custom font upload) and gradient/mesh/pattern background layers. Image and motion layers ride along with the Phase 5 security pass since they all need stricter asset validation:
+### Email features (blocked on Resend sending domain)
+- **Change email** — request flow, signed token verification, confirmation email. Infrastructure is in `src/lib/email.ts`, `src/app/api/account/verify-email/route.ts`, and `account-actions.ts`. Activate by adding `RESEND_API_KEY` + `EMAIL_FROM` env vars and wiring the UI back into `AccountPanel`.
+- **Email digest** — weekly stats email every Monday at 9am UTC. Cron at `/api/cron/email-digest` is ready; add to `vercel.json` `crons` array and set env vars to enable.
+- **Live-now follow notifications** — viewers subscribe to a creator's go-live alerts. Requires EventSub (shipped) + Resend domain + `live_alert_subscriptions` table (migration 19-planned).
 
-### Backgrounds — deferred to Phase 5
+### Account security
+- **2FA / passkeys (WebAuthn)** — `@simplewebauthn/server` + `@simplewebauthn/browser`, credentials table, registration + authentication ceremonies.
+
+### Tier 2/3 widgets (post-launch, per-user OAuth)
+All need per-user OAuth + token refresh infrastructure:
+
+| Widget | Auth needed | Env vars |
+|---|---|---|
+| Spotify now-playing | Per-user OAuth (scopes: `user-read-playback-state`) | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` |
+| Steam profile | API key only | `STEAM_API_KEY` |
+| Last.fm scrobbles | API key only | `LASTFM_API_KEY` |
+| Strava activities | Per-user OAuth | `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET` |
+| Letterboxd | Public scrape | — |
+| Twitter/X | Deferred — API unstable | — |
+| Kick | Deferred — API not mature | — |
+
+---
+
+## 🧪 Testing
+
+No automated tests exist yet. This section tracks the plan for adding coverage, automation, and a CI gate.
+
+### Philosophy
+- Test behaviour, not implementation. A test that breaks when you rename a variable is a bad test.
+- Prioritise by blast radius: critical paths (auth, public page, widget resolution, server actions) first.
+- Integration tests over unit tests where possible — the app's real bugs hide at boundaries (Supabase query, server action, Next.js routing), not inside pure functions.
+
+### Tools
+| Layer | Tool | Reason |
+|---|---|---|
+| Unit / integration | **Vitest** | Fast, native ESM, works with Next.js and `server-only` imports |
+| E2E | **Playwright** | Headless Chromium, first-class Next.js support, parallel runs |
+| CI | **GitHub Actions** | Already hosting the repo; free for public / cheap for private |
+| Coverage | Vitest `--coverage` (v8 provider) | No extra config needed |
+
+### Test plan
+
+#### Priority 1 — Pure functions (no I/O, highest ROI)
+These are deterministic and have zero external dependencies. Write first.
+
+- `src/lib/sanitize.ts` — `sanitizeShortText`, `sanitizeMultilineText`: NFKC, control char stripping, bidi override removal
+- `src/lib/url-validate.ts` — `validateLinkUrl`: private IP ranges, scheme allowlist, localhost rejection
+- `src/lib/widgets/resolve.ts` — `resolveWidget`: all 15 widget kinds, auto-detect, error paths
+- `src/lib/widgets/detect.ts` — `detectWidgetFromUrl`: platform URL patterns
+- `src/lib/widgets/cross-promo.ts` — `detectCrossPromoFromUrl`: Instagram/Twitter/TikTok/YouTube/Twitch/Spotify handles
+- `src/lib/palette.ts` — HSL color derivation from seed color
+- `src/lib/magic-arrange.ts` — grid / asymmetric / hero heuristics
+- `src/lib/widgets/twitch-eventsub.ts` — `ensureChannelSubscriptions` (mock Supabase + Helix)
+
+#### Priority 2 — Server actions (mock Supabase, test logic)
+Use `vi.mock` to stub `createAdminClient`. Test the action logic, not the DB.
+
+- `createBlock` — type validation, URL normalisation, sanitisation
+- `createWidgetBlock` — resolve chain, Twitch EventSub hook fires on `twitch_live`
+- `updateProfile` — reserved username check, avatar URL validation
+- `requestEmailChange` — email format validation, token generation, duplicate detection
+- `getAnalyticsData` — query construction, date cutoff logic, referrer domain extraction
+
+#### Priority 3 — API routes (test with `fetch` + Next.js test utilities)
+- `/api/webhooks/twitch` — valid HMAC passes, bad signature 403s, replay guard 410s, challenge responds with challenge text, `stream.online` upserts `creator_live_status`
+- `/api/ical/[username]` — returns valid ICS content-type, RRULE is correct, handles missing schedule gracefully
+- `/api/analytics/export` — requires auth, CSV has expected headers, `?days=all` returns all data
+
+#### Priority 4 — E2E (Playwright, real browser)
+Cover the critical happy paths that need a running app:
+
+1. **Sign in + first page** — OAuth mock → lands on `/dashboard` with onboarding checklist
+2. **Add a link block** — fill form → block appears in list → visible on public page
+3. **Add a Twitch live widget** — paste URL → widget appears with channel name
+4. **Theme picker** — select a preset → public page preview updates
+5. **Canvas mode** — switch to canvas → add text element → drag it → save persists on reload
+6. **Public page renders** — visit `/{username}` → all blocks visible, correct theme applied
+7. **OG image** — `GET /api/og/{username}` → response is `image/png`, no 500
+
+### Running tests
+
+```bash
+# Unit + integration
+npm run test              # vitest run
+npm run test:watch        # vitest watch
+npm run test:coverage     # vitest run --coverage
+
+# E2E
+npm run test:e2e          # playwright test
+npm run test:e2e:ui       # playwright test --ui
 ```
-theme.background.layers = [
-  …,
-  { type: 'image', url, blur, opacity, blend, position },
-  { type: 'noise', intensity },
-  { type: 'video', url, poster }
-]
-    { type: 'image', url, blur, opacity, blend, position },
-    { type: 'pattern', kind: 'dots', color, scale, opacity },
-    { type: 'noise', intensity },
-    { type: 'video', url, poster }
-  ]
-}
+
+### CI setup (GitHub Actions)
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm ci
+      - run: npm run test
+      - run: npm run build
 ```
-- Animated backgrounds (subtle drift, particle field, animated noise) with `prefers-reduced-motion` respect.
-- Video backgrounds (mp4/webm loop, ≤10MB, muted autoplay, poster fallback).
-- Per-section backgrounds (requires the canvas editor from Phase 4).
+
+E2E runs separately on a schedule or pre-deploy hook (requires a running Vercel preview URL).
+
+### Setup checklist
+
+```
+[ ] npm install -D vitest @vitest/coverage-v8 @testing-library/react @testing-library/jest-dom jsdom
+[ ] npm install -D @playwright/test
+[ ] Create vitest.config.ts
+[ ] Create playwright.config.ts
+[ ] Add test scripts to package.json
+[ ] Add .github/workflows/ci.yml
+[ ] Write Priority 1 tests (pure functions)
+[ ] Write Priority 2 tests (server actions with mocked Supabase)
+[ ] Write Priority 3 tests (API routes)
+[ ] Write Priority 4 E2E tests (critical happy paths)
+```
 
 ---
 
-## 🟣 Phase 4 — Canvas editor
+## 🔧 Refactoring
 
-The stacked-column layout is the ceiling. Pages built with column layouts feel templated no matter how they're themed. To deliver the "genuinely different" pillar, the editor must give up the column. Shipped in three parts; canvas is opt-in via `profiles.layout_mode` so existing stacked pages stay untouched.
+Known code quality issues worth addressing before the codebase grows further. None of these are bugs — they're accumulated design debt that will slow future development if left.
 
-### Element model
-Positioned elements live in a separate `elements` table that mirrors block content (type, title, url, content, widget_kind, meta, visible) plus position fields (`x`, `y`, `w`, `h`, `rotation`, `z`, `locked`) and reserved mobile overrides (`mobile_x`, `mobile_y`, `mobile_w`, `mobile_h`). Profiles set `layout_mode = 'stack' | 'canvas'` (default `stack`).
+### High priority
 
-### Phase 4 part 1 — Foundation (shipped)
-- Migration 11 adds the `elements` table + `profiles.layout_mode` flag + RLS (public read of visible elements, owner-only write).
-- Shared `loadWidgetData` helper consumed by both renderers — works on anything shaped `{ id, widget_kind, meta }`.
-- `ProfileCanvasRender` paints positioned elements over the layered background. Header (avatar + name + handle + bio) is fixed at the top of a 600px-wide canvas; below that everything is free-positioned. Canvas height auto-grows to the lowest element.
-- `/{username}` branches on `layout_mode` and serves the right renderer.
-- `/dashboard/canvas` editor: click-to-select, drag-to-move (window-level pointer listeners so fast drags don't strand the element), Delete/Backspace to remove, debounced server save per drag. Add-element panel supports text / heading / divider / link (title+URL) / widget (paste-any-URL with `detectWidgetFromUrl` + tip-jar fallback).
-- Dashboard "Layout" card: one-click "Try canvas mode" copies every existing block into a vertical-stack element layout so the page looks identical the moment canvas is on; one-click revert to stacked.
+**1. Deduplicate widget renderer dispatch**
+`profile-render.tsx` and `profile-canvas-render.tsx` contain near-identical `if (kind === "twitch_live") ...` chains for all 15 widget kinds. Every new widget kind requires updating both files (which caused the canvas cross-promo bug). Extract a shared `<WidgetRenderer kind meta theme size preview />` server component and replace both switch blocks with it.
 
-### Phase 4 part 2 — Editor polish (shipped)
-- **Resize handles** — 8-way (corners + edges) with min-size clamping; resize math runs in canvas-axis coordinates (rotated boxes resize with a visible offset for v1).
-- **Rotation handle** — atan2-based; hold shift to snap to 15° increments.
-- **Snap-to-grid** — 8px invisible grid. Drag and resize both snap; grid snaps yield only when no edge-snap engages.
-- **Alignment guides** — edges of the moving box (left/center/right + top/middle/bottom) snap to other elements' edges and the canvas centerline within a 6px threshold. Visible blue guide line renders for any active snap.
-- **Multi-select** — shift-click toggles in/out of the selection. Marquee select (drag empty surface) replaces selection; shift-drag empty surface adds to it. Resize and rotate are single-select only (multi-resize deferred); drag, align, distribute, duplicate, delete all work on the group.
-- **Group operations** — toolbar buttons for align left/center/right/top/middle/bottom (needs ≥2 selected) and distribute horizontal/vertical (needs ≥3). Commits with a single `batchUpdateElements` round trip.
-- **Keyboard** — arrows nudge 1px, shift+arrow 10px. ⌘/Ctrl+Z undo, ⌘/Ctrl+Shift+Z redo, ⌘/Ctrl+C copy, ⌘/Ctrl+V paste, ⌘/Ctrl+D duplicate, ⌘/Ctrl+A select-all, Delete/Backspace remove.
-- **Undo/redo** — 50-entry in-memory stack of element snapshots. Server sync uses `diffPlacements` to send only changed rows.
-- **Copy / paste / duplicate** — in-memory clipboard (cross-tab paste deferred). Pasted elements are duplicated server-side and offset by 16px so they're visible above the originals.
-- **Mobile reflow** — public page auto-renders a mobile-reflowed canvas on `< sm` viewports (sorted by `y`, stacked at 360px wide). Editor has a Desktop ↔ Mobile preview toggle; dragging or resizing in mobile view writes `mobile_x/y/w/h` overrides instead of the desktop placement. Per-element "Reset to auto-reflow" button clears overrides.
+**2. Eliminate prop-drilling `username` through canvas renderer**
+`username` is passed `ProfileCanvasRender → ElementBox → ElementContent → WidgetElement` purely for the ICS calendar link in `StreamScheduleWidget`. Replace with a React Context (`CanvasProfileContext`) so only the components that need it (currently just `StreamScheduleWidget`) reach for it. If this is done, remove the `username` param from `ElementBox`, `ElementContent`, and `WidgetElement`.
 
-### Phase 4 part 2 follow-ups (shipped)
-- **Editor mobile responsiveness** — sidebar is now an off-canvas drawer on `<lg` viewports (opened from a "Tools" button next to the helper bar), the canvas auto-scales via `ResizeObserver` so the 600px desktop frame fits without horizontal scroll on phones, and the percent appears in the preview header chip. Resize/rotate handles gained a 22px transparent hit zone (visible footprint unchanged) so they're touch-friendly without looking bulky on desktop.
-- **Resize math on rotated elements** — resize handles now hide whenever `rotation ≠ 0` (the rotation handle stays). Skips the broken canvas-axis math entirely; users rotate, then resize after resetting rotation. Local-space resize math is a future enhancement.
-- **Cross-tab paste** — `Ctrl/Cmd+C` writes a `linkfolio-canvas-clipboard:` JSON marker via `navigator.clipboard.writeText`; `Ctrl/Cmd+V` reads it back and falls through to the in-memory clipboard when the system clipboard is unavailable (insecure context, permission denied, foreign payload). Paste across tabs and after refresh now works because the IDs round-trip through the system clipboard and `duplicateElements` re-fetches them server-side under RLS.
+**3. Data-drive the content editor widget picker**
+`block-list.tsx` has a hardcoded button grid for every widget kind (over 100 lines of JSX). `WIDGET_PICKER_SPECS` in `picker-specs.ts` already has all the metadata. Rewrite `WidgetPicker` to map over `WIDGET_PICKER_SPECS` rather than listing buttons manually. This is what caused the "cross-promo not in picker" bug when new widget kinds were added.
 
-### Phase 4 part 3 — Element library + smart assist
+**4. Extract shared `ogBackground()` helper**
+The `ogBackground(theme)` function is copy-pasted between `src/app/api/og/[username]/route.tsx` and `src/app/api/og/[username]/story/route.tsx`. Move it to `src/lib/og-helpers.ts` and import it in both.
 
-**Visual elements (shipped):**
-- `ElementType` decoupled from `BlockType` — added canvas-only `shape`, `sticker`, `image` types backed by migration 12 (`12_canvas_visual_elements.sql` widens the `elements_type_check` constraint).
-- **Shape element** — rect, circle, blob, triangle. Rects render via border-radius (with a 0–50% corner slider), blob renders as a deterministic SVG path seeded per element so saves match previews, triangle is a fixed SVG polygon. Per-element fill color editable from the sidebar.
-- **Sticker element** — 24-icon curated lucide set (Star, Heart, Sparkles, Flame, Music, Gamepad2, …). One-click insert from a 6-column picker; per-element color editable.
-- **Image element** — upload PNG/JPG/GIF/WebP (≤5MB) into the existing `backgrounds` bucket under `${userId}/element-images/`, with magic-byte validation (rejects renamed binaries). Mask presets: none · circle · rounded · blob · hexagon · triangle, implemented with CSS `clip-path`; `object-fit` cover/contain toggle.
-- All three types are inert by default (no clicks, no hover, no widget fetches), so they're pure visual layers above the page composition.
+### Medium priority
 
-**First-class Button (shipped):**
-- The canvas `link` element renders as a true Button — per-instance `variant` (solid · outline · ghost · pill) and an optional lucide icon prefix from a curated 12-icon set (`ArrowRight`, `ExternalLink`, social glyphs, etc.). Outline/ghost variants drop the background, pill rounds the box independent of the theme's button-shape setting. Sidebar inspector lets the creator switch variant + icon in one click.
-- Sidebar section renamed from "Link button" to "Button" to match the rest of the canvas vocabulary.
+**5. Centralize `revalidatePublicPage`**
+`revalidatePublicPage(userId)` is duplicated in `dashboard/content/actions.ts` and `dashboard/canvas/actions.ts`. Extract to `src/lib/revalidate.ts` and import everywhere.
 
-**Per-section backgrounds (shipped):**
-- New `region` element type backed by migration 13 (`13_canvas_regions.sql` widens `elements_type_check` to include `'region'`). Each region carries `meta = { layers: BgLayer[], radius }` — the same layer union the global theme background uses, scoped to a single canvas box.
-- Renderer reuses `BackgroundLayers` inside the region's clipped box, so gradient / mesh / pattern / image layers all work without new code. Default region drops in with a soft indigo→violet gradient.
-- Inspector exposes the two knobs creators actually reach for (gradient endpoints + corner radius); the full layer editor on `/dashboard/theme` handles deeper edits.
+**6. Replace `as unknown as X` casts in `load.ts`**
+The `stream_schedule` and `cross_promo` dispatch in `load.ts` uses `meta as unknown as StreamScheduleMeta` because `meta` is typed as `Record<string, unknown>`. Add a lightweight runtime validator (e.g. a `parseStreamScheduleMeta(meta)` function that checks required fields) so these casts are type-safe and catch corrupt DB rows early.
 
-**Magic arrange (shipped):**
-- `lib/magic-arrange.ts` exposes three pure heuristics — `arrangeGrid` (2-column grid), `arrangeAsymmetric` (alternating sides with golden-ratio widths), `arrangeHero` (hero-led: biggest element full-width, rest tiled below).
-- Sidebar "Arrange" cluster has three one-click buttons (Wand2 for grid, ASYM, HERO). Application uses the existing `batchUpdateElements` round trip with an undo snapshot — so Cmd+Z reverts a magic arrange.
-- Region elements are excluded from arrangement (they're backdrops, not flow content); element aspect ratios are preserved.
+**7. Consolidate `createAdminClient()` call sites**
+`createAdminClient()` is called at the top of nearly every server action. Consider a thin service layer (`src/lib/db/profiles.ts`, `src/lib/db/blocks.ts`, etc.) that wraps Supabase queries with typed return shapes. Not essential now but will reduce `as` casts throughout the codebase.
 
-**AI copy/layout assist — not built.** Originally scoped for Phase 4 part 3 but skipped: requires an Anthropic API account + key, and the maintainer doesn't want that dependency. Easy to add later — the magic-arrange heuristic that shipped is the deterministic baseline; an AI layout pass could read the same canvas and propose alternatives if it's ever wanted. AI copy assist (rewrite a bio or heading) would be a single Claude Messages call gated on `ANTHROPIC_API_KEY`.
+### Low priority
 
----
+**8. Replace `CODEBASE_EXPLORATION_REPORT.md`**
+A `CODEBASE_EXPLORATION_REPORT.md` was accidentally committed to the repo root by a planning agent. Delete it — the information belongs in code comments or this roadmap, not as a loose markdown file.
 
-## 🔒 Phase 5 — Hardening + launch
+**9. Branded sign-in page**
+`src/app/auth/signin/page.tsx` uses the default NextAuth sign-in UI. Replace with a branded page once the design system is stable.
 
-All operational and compliance work that must land before public launch, regardless of feature scope.
-
-### Security (shipped)
-- **Reserved usernames** — 40-entry denylist (`admin`, `api`, `auth`, `dashboard`, `r`, `login`, `signup`, `linkfolio`, …) stored in `reserved_usernames` with a local fallback set for DB-outage safety. Enforced in both `checkUsernameAvailable` and `updateProfile`.
-- **Storage quotas** — 50 MB/user across avatars, backgrounds, fonts, and element-images. `user_storage` table holds the running counter (incremented on upload, decremented on font delete) and the settings page surfaces a usage bar.
-- **Magic-byte validation everywhere** — shared `lib/image-magic.ts` validates PNG/JPG/GIF/WebP signatures before upload; applied to avatar, background, and element-image paths (font uploads already had a WOFF2 check).
-- **Rate limiting (Postgres-backed)** — `rate_limit_buckets` table + `lib/rate-limit.ts` sliding-window limiter. Policies: `/r/{id}` redirects 60/min/IP, uploads 10/min/user, auth scope reserved for future use. Chose Postgres over Upstash to avoid a second SaaS dependency.
-
-### Security (shipped — round 2)
-- **URL allow/block list** — `lib/url-validate.ts` rejects non-http(s)/mailto/tel schemes, localhost, all RFC1918 + CGNAT + link-local ranges, IPv6 ULA/loopback, and pre-parse `javascript:`/`data:`/`vbscript:`/`file:` prefixes. Wired into both `createBlock`/`updateBlock` (stack mode) and `createElement`/`updateElement` (canvas mode).
-- **Input sanitization** — `lib/sanitize.ts` runs NFKC normalize + strips C0/C1 control chars + zero-width + bidi-override on every text field (username, display name, bio, link title, content). Stops `ＡＤＭＩＮ` fullwidth lookalikes and RLO-based filename spoofing.
-- **Audit log** — `audit_log` table (migration 15) + `lib/audit-log.ts` helper logs auth, deletion, export, rate-limit hits, URL rejections, and reserved-username attempts. IPs are sha256-salted with `AUDIT_LOG_SALT`, never stored raw.
-- **CSRF** — Next.js 14 server actions already enforce same-origin via the framework's built-in `Origin` header check; no separate token machinery needed for the routes we ship.
-
-### Performance (shipped)
-- **Edge runtime** on `/r/{id}` — sub-100ms global redirects (`export const runtime = "edge"`).
-- **Preconnect + dns-prefetch** to the Supabase storage origin from the root layout so the first avatar/background fetch skips a TLS handshake.
-- **`next/image` enabled** for Supabase storage in [next.config.mjs](next.config.mjs) — public-bucket pattern allowlisted, third-party hosts blocked from the optimizer. Components can be migrated incrementally (avatar / element image are the biggest LCP wins).
-- **Materialized analytics views** — `mv_page_views_daily` + `mv_block_clicks_daily` (migration 16) with a `refresh_analytics_matviews()` SECURITY DEFINER function and a `*/5 * * * *` pg_cron schedule.
-
-### Performance (still TODO)
-- Static landing page (`force-static`) — currently dynamic because it checks the session for the dashboard redirect.
-- Bundle analysis + lucide tree-shake audit.
-
-### Sharing & SEO (shipped)
-- **Web Share API + QR modal** — `<ShareButton>` on the dashboard uses `navigator.share` when available, falls back to a modal with a copy button and an inline QR code generated client-side ([lib/qr.ts](src/lib/qr.ts), no third-party deps).
-- **robots.txt** — auto-served via [src/app/robots.ts](src/app/robots.ts); public profiles crawlable, `/dashboard`, `/onboarding`, `/auth`, `/r/`, `/api/` blocked.
-- **sitemap.xml** — auto-served via [src/app/sitemap.ts](src/app/sitemap.ts); includes the landing page, legal pages, and every non-deleted profile (up to 10k).
-
-### Sharing & SEO (still TODO)
-- **Live-now badge on OG images** — blocked on Phase 6 EventSub work.
-
-### Animated + video backgrounds (shipped)
-- `BgLayer` union extended with `animated` (kind: drift · noise · particles) and `video` types. `lib/themes.ts` `normalizeBackground` handles both safely.
-- `<AnimatedBackgroundLayer>` client component renders drift (CSS keyframe), noise (animated SVG `<feTurbulence>`), and particles (canvas + RAF) — all respect `prefers-reduced-motion` and render a still snapshot for motion-sensitive viewers.
-- `<video>` layer is muted-autoplay-loop with `playsInline` and optional poster. Theme editor exposes both via picker buttons + per-layer inspectors.
-
-### Compliance (shipped)
-- **Account deletion** — soft delete via `profiles.deleted_at` + `deleted_grace_until` (30-day grace). Page goes dark immediately (`/{username}` 404s deleted profiles); user can cancel from settings during the grace window. The daily Vercel Cron at [/api/cron/hard-delete-accounts](src/app/api/cron/hard-delete-accounts/route.ts) wipes storage + rows for profiles past the grace window (auth via `CRON_SECRET` header; schedule lives in [vercel.json](vercel.json)).
-- **Data export (GDPR)** — `exportUserData` action assembles profile + blocks + elements + user_fonts + page_views + block_clicks + storage row into a single JSON dump that the dashboard panel downloads client-side.
-- **Terms of Service** at [/legal/terms](src/app/legal/terms/page.tsx) — covers accounts, content licensing, third-party platforms, storage, deletion, no-warranty.
-- **Privacy Policy** at [/legal/privacy](src/app/legal/privacy/page.tsx) — covers what's collected (and what isn't), retention, third-party services, user rights, children.
-
----
-
-## 📈 Phase 6 — Growth & retention (post-launch)
-
-### Live-data freshness (webhook-driven) — moved from Phase 1
-- **Twitch EventSub**: subscribe to `stream.online` / `stream.offline` events for known streamers. Webhook endpoint with HMAC signature verification, secret rotation, subscription management. Updates a `creator_live_status` table; pages read from it. Removes polling cost at scale.
-- **Smart polling**: only revalidate for creators whose pages were viewed in the last 5 minutes (`page_views`-derived hot set).
-- **Graceful degradation**: API down → show last known state with subtle "last seen" note. Needs the `creator_live_status` persistence table from EventSub.
-- Unlocks the "live-now badge on OG images" item in Phase 5.
-
-### Tier 2/3 widgets (need OAuth or evolving APIs)
-Most need per-user OAuth + token refresh:
-- Spotify "now playing" (per-user OAuth + token refresh)
-- Steam profile (recently played, achievements)
-- Last.fm scrobbles
-- Strava recent activities
-- Letterboxd recent reviews
-- Twitter/X embed (when API stabilizes)
-- Kick live status (when API matures)
-- Instagram latest post (API limitations)
-
-### Creator analytics depth
-- `/dashboard/analytics` with charts (recharts)
-- Time-range filter (today / week / month / all)
-- Top referrers (which platform drives most traffic)
-- Top countries
-- Per-widget click breakdown
-- **Peak traffic correlated with stream schedule** — creator-specific insight Linktree doesn't offer
-- **Cross-platform reach aggregation** — combined followers/subs across all linked platforms, shown to the creator
-- CSV export
-
-### Live-now follow notifications
-- Email opt-in: viewers can subscribe to a creator's "live alerts"
-- When EventSub fires `stream.online`, batch-send notifications
-- Web push later (PWA)
-
-### Stream schedule widget
-- Manual schedule entry → ICS feed export → calendar subscription
-- Eventually pull from Twitch's schedule API
-- Timezone-aware
-
-### Cross-promotion blocks
-- "Also on TikTok," "Subscribe on YouTube," "Follow on Spotify" as themed CTAs (not generic links — branded, animated, contextual)
-
-### Instagram Story share button
-- One-tap "Share to Instagram Story" from the creator's dashboard. Generates a 1080×1920 themed image (same engine as OG images, different aspect ratio + composition for vertical) and uses Instagram's Story sharing intent / deep link. Boosts reach via the creator's own followers and is cheaper marketing than paid acquisition.
-- Optionally: a "Share my LinkFolio" widget on the public page for visitors to repost the page card on their own stories.
-- Requires: dedicated `/api/og/[username]/story` route producing a 1080×1920 PNG, plus the Instagram Stories `instagram-stories://share` intent for iOS / `intent://share?...#Intent;...end` for Android. Web fallback: a download button so creators can post manually.
-
-### Account
-- Change email (signed token verification)
-- Link additional OAuth providers
-- 2FA / passkeys (WebAuthn)
-- Email digest opt-in (weekly stats)
-
-### Verified creator badge
-- Manual review or paid
-- Visible checkmark on public page
+**10. Historical migration references to dropped `links` table**
+`02_app_schema.sql` and `05_blocks.sql` reference the old `links` table. Add `drop table if exists public.links;` to a future migration rather than editing applied ones.
 
 ---
 
@@ -342,7 +358,6 @@ Most need per-user OAuth + token refresh:
 ### Style-from-page
 - Copy another user's visual language (typography + palette + background composition) to your own
 - Requires explicit consent toggle from the source user
-- Becomes a discovery flywheel: popular pages spread their aesthetic
 
 ### Asset library
 - User uploads images once, reuses across canvas
@@ -379,26 +394,17 @@ Pro tier candidates:
 
 Stack: Stripe Checkout + Customer Portal, webhooks → `subscriptions` table, `entitlements.ts` gates.
 
-**Not** building creator-side commerce (digital store, products). Tip jars are deep links, not a payment system. Beacons can have that lane.
+**Not** building creator-side commerce (digital store, products). Tip jars are deep links, not a payment system.
 
 ---
 
 ## 🚫 Explicitly out of scope
-
-These come up often. Saying no is part of the strategy.
 
 - **Linktree-style email capture forms tied to mailing list integrations.** Adjacent product, distracts from visibility focus.
 - **Full website builder (multi-page CMS, blog hosting).** That's Webflow / Framer. We are an identity hub.
 - **Embeddable widget (iframe of someone else's LinkFolio).** Doesn't serve creator audience.
 - **Public discovery directory.** Unique-output is the discovery mechanism. Re-evaluate only if growth stalls.
 - **Twitter-shaped feed of all your activity.** Tempting; would balloon scope. Phase 7+ at earliest.
-
----
-
-## 🧹 Tech debt
-
-- `src/app/auth/signin/page.tsx` — replace with branded signin once design system stabilizes
-- Old `links` table — already dropped manually; references remain in historical migrations `02_app_schema.sql` and `05_blocks.sql`. Add a defensive `drop table if exists public.links` in a future migration rather than editing applied ones.
 
 ---
 
@@ -413,24 +419,25 @@ These come up often. Saying no is part of the strategy.
 | 05 | `05_blocks.sql` | New `blocks` table replacing `links`, RLS, account-link trigger |
 | 06 | `06_analytics_and_visibility.sql` | `blocks.visible`, `block_clicks`, `page_views` policy + grants |
 | 07 | `07_widgets.sql` | `blocks.widget_kind` + `meta`; `app_tokens` for Twitch token cache |
-| 08 | `08_typography_and_background_layers.sql` | Hard cutover: rewrites every `profiles.theme` row into `{ typography: {display,heading,body,ui,mono}, background: { layers: [...] } }`, drops legacy `font` / `bg_from` / `bg_to` |
+| 08 | `08_typography_and_background_layers.sql` | Hard cutover: rewrites every `profiles.theme` row into the current typography + background layer schema |
 | 09 | `09_user_fonts.sql` | `public.user_fonts` table + `fonts` storage bucket, RLS, public read |
-| 10 | `10_onboarding_flag.sql` | `profiles.onboarded_at` for onboarding re-run protection (backfilled for users with existing blocks) |
-| 11 | `11_canvas_elements.sql` | `elements` table (positioned canvas elements with widget support, RLS, updated_at trigger) + `profiles.layout_mode` flag |
-| 12 | `12_canvas_visual_elements.sql` | Widens `elements_type_check` with `'shape'`, `'sticker'`, `'image'` and re-asserts the widget_kind/type pairing rule for the new types |
-| 13 | `13_canvas_regions.sql` | Widens `elements_type_check` with `'region'` for per-section background regions |
-| 14 | `14_hardening.sql` | `reserved_usernames` seed, `user_storage` counter, `rate_limit_buckets`, `profiles.deleted_at` + `deleted_grace_until` |
+| 10 | `10_onboarding_flag.sql` | `profiles.onboarded_at` for onboarding re-run protection |
+| 11 | `11_canvas_elements.sql` | `elements` table + `profiles.layout_mode` flag + RLS |
+| 12 | `12_canvas_visual_elements.sql` | Widens `elements_type_check` with `'shape'`, `'sticker'`, `'image'` |
+| 13 | `13_canvas_regions.sql` | Widens `elements_type_check` with `'region'` for per-section backgrounds |
+| 14 | `14_hardening.sql` | `reserved_usernames`, `user_storage`, `rate_limit_buckets`, `profiles.deleted_at` + `deleted_grace_until` |
 | 15 | `15_audit_log.sql` | Append-only `audit_log` (IP hashed with salt), service-role-only access |
 | 16 | `16_analytics_matviews.sql` | `mv_page_views_daily` + `mv_block_clicks_daily` matviews + `refresh_analytics_matviews()` + pg_cron 5-min schedule |
+| 17 | `17_account_management.sql` | `email_change_tokens`, `profiles.email_digest_opted_in`, cross-schema RPC helpers (`get_user_linked_providers`, `email_exists`, `update_user_email`, `get_user_email`) |
+| 18 | `18_eventsub.sql` | `creator_live_status` + `twitch_eventsub_subscriptions` for Twitch EventSub webhook infrastructure |
+| 19 | `19_new_widget_kinds.sql` | Widens `blocks_widget_kind_check` + `elements_widget_kind_check` with `'stream_schedule'`, `'cross_promo'`; adds `profiles.verified` |
 
 ### Planned migrations
 
 | # | Purpose | Phase |
 |---|---|---|
-| 17 | `elements_mobile_overrides`: tighten mobile_* columns once Phase 4b auto-reflow lands | 4 |
-| 18 | `creator_live_status`: cached live state per creator with EventSub timestamps | 6 |
-| 19 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 |
-| 20 | `domains`: custom domain verification | 7 |
+| 20 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 (deferred) |
+| 21 | `domains`: custom domain verification | 7 |
 
 Run migrations in order in Supabase SQL Editor. Each is idempotent.
 
@@ -438,15 +445,14 @@ Run migrations in order in Supabase SQL Editor. Each is idempotent.
 
 ## How priorities are decided
 
-When deciding what to build next:
-
-1. **Creator visibility first.** Every sprint should make a creator's page more *discoverable*, more *alive*, or more *visually distinct*. If a feature doesn't serve one of those three pillars, it's not next.
-2. **Live data integrity over feature breadth.** A widget that occasionally shows wrong status is worse than not having it. Build fewer widgets; make them feel real.
-3. **Onboarding speed is a feature.** First-run-to-shareable-page must stay under 90 seconds. Anything that slows this gets cut or moved.
+1. **Creator visibility first.** Every sprint should make a creator's page more *discoverable*, more *alive*, or more *visually distinct*.
+2. **Live data integrity over feature breadth.** A widget that occasionally shows wrong status is worse than not having it.
+3. **Onboarding speed is a feature.** First-run-to-shareable-page must stay under 90 seconds.
 4. **Visual depth before feature count.** Better to have 6 widget types that look stunning on every theme than 20 that look like third-party islands.
-5. **Security & rate limiting before scale.** Once we have real users, harden before someone abuses the redirect endpoint or upload pipeline.
-6. **Monetization last.** Only after a free product creators actually use.
+5. **Security & rate limiting before scale.** Harden before real users can abuse the system.
+6. **Test before growing.** Once a subsystem is stable, write tests before adding to it. Don't let test debt compound.
+7. **Monetization last.** Only after a free product creators actually use.
 
 ---
 
-*Last updated: this commit*
+*Last updated: 2026-05-28*
