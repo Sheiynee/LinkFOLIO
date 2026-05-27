@@ -100,6 +100,38 @@ export async function getTwitchLiveStatus(channel: string): Promise<TwitchLiveDa
   const login = channel.trim().toLowerCase();
   if (!login) return null;
 
+  // Prefer the EventSub-driven live status cache if it's fresh (< 2 minutes old).
+  const supabase = createAdminClient();
+  const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  const { data: cached } = await supabase
+    .from("creator_live_status")
+    .select("broadcaster_id, is_live, stream_title, game_name, viewer_count, started_at, updated_at")
+    .eq("channel", login)
+    .gt("updated_at", twoMinutesAgo)
+    .maybeSingle();
+
+  if (cached) {
+    // Need the user profile (avatar, display_name) — still cached for 1h via Next.js fetch cache.
+    const usersRes = await helix<HelixUsersResponse>("/users", { login }, 60 * 60);
+    const user = usersRes?.data?.[0];
+    if (!user) return null;
+
+    return {
+      user: { id: user.id, login: user.login, display_name: user.display_name, profile_image_url: user.profile_image_url },
+      stream: cached.is_live
+        ? {
+            title: cached.stream_title ?? "",
+            game_name: cached.game_name ?? "",
+            viewer_count: cached.viewer_count ?? 0,
+            started_at: cached.started_at ?? new Date().toISOString(),
+            thumbnail_url: "",
+          }
+        : null,
+      fetched_at: cached.updated_at,
+    };
+  }
+
+  // Cache miss — fall back to Helix polling and write the result back.
   const [usersRes, streamsRes] = await Promise.all([
     helix<HelixUsersResponse>("/users", { login }, 60 * 60),
     helix<HelixStreamsResponse>("/streams", { user_login: login }, 30),
@@ -109,6 +141,19 @@ export async function getTwitchLiveStatus(channel: string): Promise<TwitchLiveDa
   if (!user) return null;
 
   const stream = streamsRes?.data?.[0] ?? null;
+
+  // Back-fill creator_live_status so the next request can use the cache.
+  await supabase.from("creator_live_status").upsert({
+    channel: login,
+    broadcaster_id: user.id,
+    is_live: !!stream,
+    stream_title: stream?.title ?? null,
+    game_name: stream?.game_name ?? null,
+    viewer_count: stream?.viewer_count ?? null,
+    started_at: stream?.started_at ?? null,
+    updated_at: new Date().toISOString(),
+  });
+
   return {
     user: {
       id: user.id,

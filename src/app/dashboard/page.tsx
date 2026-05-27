@@ -136,24 +136,28 @@ export default async function DashboardPage() {
         />
 
         <div className="grid grid-cols-2 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription className="flex items-center gap-1">
-                <Eye className="h-3.5 w-3.5" />
-                Page views
-              </CardDescription>
-              <CardTitle className="text-3xl">{totalViews.toLocaleString()}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription className="flex items-center gap-1">
-                <MousePointerClick className="h-3.5 w-3.5" />
-                Link clicks
-              </CardDescription>
-              <CardTitle className="text-3xl">{totalClicks.toLocaleString()}</CardTitle>
-            </CardHeader>
-          </Card>
+          <Link href="/dashboard/analytics" className="group">
+            <Card className="group-hover:bg-muted/30 transition-colors">
+              <CardHeader className="pb-2">
+                <CardDescription className="flex items-center gap-1">
+                  <Eye className="h-3.5 w-3.5" />
+                  Page views
+                </CardDescription>
+                <CardTitle className="text-3xl">{totalViews.toLocaleString()}</CardTitle>
+              </CardHeader>
+            </Card>
+          </Link>
+          <Link href="/dashboard/analytics" className="group">
+            <Card className="group-hover:bg-muted/30 transition-colors">
+              <CardHeader className="pb-2">
+                <CardDescription className="flex items-center gap-1">
+                  <MousePointerClick className="h-3.5 w-3.5" />
+                  Link clicks
+                </CardDescription>
+                <CardTitle className="text-3xl">{totalClicks.toLocaleString()}</CardTitle>
+              </CardHeader>
+            </Card>
+          </Link>
         </div>
 
         <Card>

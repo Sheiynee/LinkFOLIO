@@ -8,6 +8,7 @@ import { sanitizeMultilineText, sanitizeShortText } from "@/lib/sanitize";
 import type { WidgetKind, WidgetSize } from "@/lib/widgets/types";
 import { isWidgetSize } from "@/lib/widgets/types";
 import { resolveWidget } from "@/lib/widgets/resolve";
+import { ensureChannelSubscriptions } from "@/lib/twitch-eventsub";
 
 async function revalidatePublicPage(userId: string) {
   const supabase = createAdminClient();
@@ -247,6 +248,11 @@ export async function createWidgetBlock({ kind, input }: CreateWidgetInput) {
     .select("id")
     .single();
   if (error) return { error: error.message };
+
+  // Fire-and-forget EventSub subscription for Twitch live widgets.
+  if (finalKind === "twitch_live" && typeof meta?.channel === "string") {
+    void ensureChannelSubscriptions(meta.channel);
+  }
 
   revalidatePath("/dashboard/content");
   revalidatePath("/dashboard");

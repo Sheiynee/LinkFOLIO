@@ -47,7 +47,7 @@ export async function GET(
     const supabase = createAdminClient();
     const { data: profile, error } = await supabase
       .from("profiles")
-      .select("username, display_name, bio, avatar_url, theme")
+      .select("id, username, display_name, bio, avatar_url, theme")
       .eq("username", params.username.toLowerCase())
       .maybeSingle();
 
@@ -58,6 +58,29 @@ export async function GET(
     const name = profile.display_name ?? profile.username;
     const initial = (name[0] ?? "?").toUpperCase();
     const bio = profile.bio ? truncate(profile.bio, 110) : null;
+
+    // Check if any Twitch live widget for this profile is currently live.
+    const { data: twitchBlocks } = await supabase
+      .from("blocks")
+      .select("meta")
+      .eq("user_id", profile.id ?? "")
+      .eq("widget_kind", "twitch_live");
+
+    let isLive = false;
+    if (twitchBlocks && twitchBlocks.length > 0) {
+      const channels = twitchBlocks
+        .map((b) => (b.meta as { channel?: string } | null)?.channel)
+        .filter(Boolean) as string[];
+      if (channels.length > 0) {
+        const { data: liveRows } = await supabase
+          .from("creator_live_status")
+          .select("is_live")
+          .in("channel", channels)
+          .eq("is_live", true)
+          .limit(1);
+        isLive = (liveRows?.length ?? 0) > 0;
+      }
+    }
 
     return new ImageResponse(
       (
@@ -123,6 +146,9 @@ export async function GET(
             >
               <div
                 style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 16,
                   fontSize: 64,
                   fontWeight: 700,
                   lineHeight: 1.1,
@@ -130,6 +156,24 @@ export async function GET(
                 }}
               >
                 {name}
+                {isLive && (
+                  <span
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      fontSize: 22,
+                      fontWeight: 700,
+                      color: "#ef4444",
+                      background: "#ef44441a",
+                      borderRadius: 6,
+                      padding: "4px 12px",
+                      letterSpacing: "0.05em",
+                    }}
+                  >
+                    ● LIVE
+                  </span>
+                )}
               </div>
               <div
                 style={{

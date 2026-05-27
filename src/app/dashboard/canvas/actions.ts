@@ -33,6 +33,7 @@ import { addStorageUsage, ensureStorageHeadroom } from "@/lib/storage-quota";
 import { rateLimit, RL_UPLOAD } from "@/lib/rate-limit";
 import { validateLinkUrl } from "@/lib/url-validate";
 import { sanitizeMultilineText, sanitizeShortText } from "@/lib/sanitize";
+import { ensureChannelSubscriptions } from "@/lib/twitch-eventsub";
 
 async function getUsernameForUser(userId: string): Promise<string | null> {
   const supabase = createAdminClient();
@@ -199,6 +200,12 @@ export async function createElement(input: CreateElementInput) {
     .single();
 
   if (error) return { error: error.message };
+
+  // Fire-and-forget EventSub subscription for Twitch live elements.
+  if (input.widget_kind === "twitch_live" && typeof input.meta?.channel === "string") {
+    void ensureChannelSubscriptions(input.meta.channel);
+  }
+
   await revalidateUserPages(session.user.id);
   return { ok: true, element: data };
 }

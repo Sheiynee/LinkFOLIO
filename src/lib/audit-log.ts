@@ -21,6 +21,8 @@ export type AuditEvent =
   | "account.email_change_requested"
   | "account.email_changed"
   | "account.digest_sent"
+  | "twitch.webhook_rejected"
+  | "twitch.subscription_revoked"
   | "upload.rejected"
   | "url.rejected"
   | "rate_limit.hit"
