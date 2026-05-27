@@ -6,8 +6,74 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { subtractStorageUsage } from "@/lib/storage-quota";
 import { logAuditEvent } from "@/lib/audit-log";
+import { sendEmailVerification } from "@/lib/email";
 
 const GRACE_PERIOD_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+export async function requestEmailChange(newEmail: string) {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Not authenticated" };
+
+  const trimmed = newEmail.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return { error: "Invalid email address" };
+
+  const supabase = createAdminClient();
+
+  const { data: exists } = await supabase.rpc("email_exists", { p_email: trimmed });
+  if (exists) return { error: "That email is already in use" };
+
+  // Generate a 256-bit hex token.
+  const tokenBytes = new Uint8Array(32);
+  crypto.getRandomValues(tokenBytes);
+  const token = Array.from(tokenBytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+  const { error: insertError } = await supabase.from("email_change_tokens").insert({
+    user_id: session.user.id,
+    new_email: trimmed,
+    token,
+    expires_at: expiresAt,
+  });
+  if (insertError) return { error: "Could not create verification token" };
+
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ??
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : "http://localhost:3000");
+  const verifyUrl = `${siteUrl}/api/account/verify-email?token=${token}`;
+
+  try {
+    await sendEmailVerification(trimmed, verifyUrl);
+  } catch {
+    // Don't leak send failures; log and silently succeed so we don't reveal email existence.
+  }
+
+  await logAuditEvent("account.email_change_requested", {
+    userId: session.user.id,
+    detail: { expires_at: expiresAt },
+  });
+
+  return { ok: true };
+}
+
+export async function updateEmailDigestPreference(optedIn: boolean) {
+  const session = await auth();
+  if (!session?.user?.id) return { error: "Not authenticated" };
+
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("profiles")
+    .update({ email_digest_opted_in: optedIn })
+    .eq("id", session.user.id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/dashboard/settings");
+  return { ok: true };
+}
 
 /**
  * Soft-delete the current account. Sets `profiles.deleted_at` + a

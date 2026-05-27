@@ -1,6 +1,6 @@
+export const dynamic = "force-static";
+
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
 import { Button } from "@/components/ui/button";
 import {
   ArrowRight,
@@ -22,10 +22,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-export default async function LandingPage() {
-  const session = await auth();
-  if (session?.user) redirect("/dashboard");
-
+export default function LandingPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-white overflow-x-hidden">
       {/* Ambient glow */}

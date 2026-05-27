@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ProfileForm } from "./profile-form";
 import { AccountPanel } from "./account-panel";
+import { ConnectedAccountsPanel } from "./connected-accounts-panel";
 import { getUserStorageUsage } from "@/lib/storage-quota";
 
 export default async function SettingsPage() {
@@ -14,14 +15,20 @@ export default async function SettingsPage() {
   if (!session?.user?.id) redirect("/auth/signin");
 
   const supabase = createAdminClient();
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("username, display_name, bio, avatar_url, deleted_at, deleted_grace_until")
-    .eq("id", session.user.id)
-    .single();
+
+  const [{ data: profile }, usage, { data: linkedProviderData }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("username, display_name, bio, avatar_url, deleted_at, deleted_grace_until")
+      .eq("id", session.user.id)
+      .single(),
+    getUserStorageUsage(session.user.id),
+    supabase.rpc("get_user_linked_providers", { p_user_id: session.user.id }),
+  ]);
 
   if (!profile) redirect("/dashboard");
-  const usage = await getUserStorageUsage(session.user.id);
+
+  const linkedProviders: string[] = Array.isArray(linkedProviderData) ? linkedProviderData : [];
 
   return (
     <main className="min-h-screen bg-background">
@@ -41,6 +48,8 @@ export default async function SettingsPage() {
             <ProfileForm initial={profile} />
           </CardContent>
         </Card>
+
+        <ConnectedAccountsPanel linkedProviders={linkedProviders} />
 
         <AccountPanel
           storageUsage={usage}

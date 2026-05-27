@@ -1,10 +1,7 @@
-/**
- * Wires `next/image` so user uploads from Supabase storage can be served
- * through the Next.js image optimizer (smaller payloads, AVIF/WebP, lazy
- * decode). We allow only the Supabase project host derived from
- * `NEXT_PUBLIC_SUPABASE_URL` so a creator can't smuggle a third-party
- * image URL through the optimizer.
- */
+import bundleAnalyzer from "@next/bundle-analyzer";
+
+const withBundleAnalyzer = bundleAnalyzer({ enabled: process.env.ANALYZE === "true" });
+
 function supabaseRemotePatterns() {
   const raw = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!raw) return [];
@@ -29,4 +26,4 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default withBundleAnalyzer(nextConfig);
