@@ -23,6 +23,17 @@ ALTER TABLE public.blocks ADD CONSTRAINT blocks_widget_kind_check CHECK (
   )
 );
 
+-- Widen the same widget_kind constraint on the elements table (canvas mode).
+ALTER TABLE public.elements DROP CONSTRAINT IF EXISTS elements_widget_kind_check;
+
+ALTER TABLE public.elements ADD CONSTRAINT elements_widget_kind_check CHECK (
+  widget_kind IS NULL OR widget_kind IN (
+    'twitch_live','twitch_vod','youtube_channel','youtube_live','youtube_video',
+    'github_repo','github_user','discord_invite','spotify_embed','tiktok_video',
+    'tip_jar','og_card','stream_schedule','cross_promo'
+  )
+);
+
 -- Verified creator badge column on profiles.
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS verified boolean NOT NULL DEFAULT false;
