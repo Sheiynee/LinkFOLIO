@@ -99,6 +99,26 @@ export function BlockList({ initial }: { initial: Block[] }) {
     });
   }
 
+  function handleAddWidgetDirect(kind: WidgetPickerKind) {
+    setError(null);
+    startTransition(async () => {
+      const result = await createWidgetBlock({ kind, input: "" });
+      if ("error" in result && result.error) { setError(result.error); return; }
+      const ok = "id" in result ? result : null;
+      const newBlock: Block = {
+        id: ok?.id ?? crypto.randomUUID(),
+        type: "widget",
+        widget_kind: (ok?.kind ?? kind) as Block["widget_kind"],
+        title: ok?.title ?? kind,
+        url: null, content: null,
+        meta: (ok?.meta ?? null) as Block["meta"],
+      };
+      setBlocks((prev) => [...prev, newBlock]);
+      setAddingWidget(null);
+      setAdding(null);
+    });
+  }
+
   function handleAddWidget(kind: WidgetPickerKind, formData: FormData) {
     setError(null);
     const input = (formData.get("input") as string | null)?.trim() ?? "";
@@ -279,15 +299,23 @@ export function BlockList({ initial }: { initial: Block[] }) {
 
       <div className="rounded-lg border p-4 bg-muted/30 space-y-3">
         {addingWidget ? (
-          <WidgetForm
-            kind={addingWidget}
-            pending={pending}
-            onCancel={() => setAddingWidget(null)}
-            onSubmit={(fd) => handleAddWidget(addingWidget, fd)}
-          />
+          addingWidget === "stream_schedule" ? null : (
+            <WidgetForm
+              kind={addingWidget}
+              pending={pending}
+              onCancel={() => setAddingWidget(null)}
+              onSubmit={(fd) => handleAddWidget(addingWidget, fd)}
+            />
+          )
         ) : adding === "widget" ? (
           <WidgetPicker
-            onPick={(kind) => setAddingWidget(kind)}
+            onPick={(kind) => {
+              if (kind === "stream_schedule") {
+                handleAddWidgetDirect(kind);
+              } else {
+                setAddingWidget(kind);
+              }
+            }}
             onCancel={() => setAdding(null)}
           />
         ) : !adding ? (
@@ -344,7 +372,9 @@ type WidgetPickerKind =
   | "tiktok_video"
   | "twitch_vod"
   | "youtube_live"
-  | "og_card";
+  | "og_card"
+  | "cross_promo"
+  | "stream_schedule";
 
 function widgetKindLabel(kind: Block["widget_kind"]): string {
   switch (kind) {
@@ -360,6 +390,8 @@ function widgetKindLabel(kind: Block["widget_kind"]): string {
     case "twitch_vod": return "Twitch VOD";
     case "youtube_live": return "YouTube live";
     case "og_card": return "Link card";
+    case "cross_promo": return "Cross-promote";
+    case "stream_schedule": return "Stream schedule";
     default: return "Widget";
   }
 }
@@ -406,6 +438,8 @@ const WIDGET_LABELS: Record<WidgetPickerKind, string> = {
   twitch_vod: "Twitch latest VOD",
   youtube_live: "YouTube live status",
   og_card: "Generic link card",
+  cross_promo: "Cross-promote",
+  stream_schedule: "Stream schedule",
 };
 
 const WIDGET_PLACEHOLDERS: Record<WidgetPickerKind, string> = {
@@ -422,6 +456,8 @@ const WIDGET_PLACEHOLDERS: Record<WidgetPickerKind, string> = {
   twitch_vod: "shroud or https://twitch.tv/shroud",
   youtube_live: "@mkbhd or https://youtube.com/@mkbhd",
   og_card: "Any https:// URL",
+  cross_promo: "https://instagram.com/username  (or TikTok, YouTube, Twitter, Twitch, Spotify)",
+  stream_schedule: "",
 };
 
 const WIDGET_HINTS: Record<WidgetPickerKind, string> = {
@@ -438,6 +474,8 @@ const WIDGET_HINTS: Record<WidgetPickerKind, string> = {
   twitch_vod: "Latest archived broadcast — thumbnail, title, view count. 5-min refresh.",
   youtube_live: "Shows a pulsing LIVE badge when the channel is broadcasting. 1-min refresh.",
   og_card: "Fetches the page's OG metadata (title, description, image) for any URL.",
+  cross_promo: "Paste your profile URL from Instagram, TikTok, YouTube, Twitter/X, Twitch, or Spotify. Creates a branded follow button.",
+  stream_schedule: "Creates an empty schedule widget. Edit it after adding to fill in your days and times.",
 };
 
 function WidgetPicker({
@@ -585,6 +623,26 @@ function WidgetPicker({
         >
           <LinkIcon className="h-4 w-4 mr-2" />
           Generic link card
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPick("cross_promo")}
+          className="justify-start"
+        >
+          <Sparkles className="h-4 w-4 mr-2" />
+          Cross-promote
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPick("stream_schedule")}
+          className="justify-start"
+        >
+          <Radio className="h-4 w-4 mr-2" />
+          Stream schedule
         </Button>
       </div>
     </div>

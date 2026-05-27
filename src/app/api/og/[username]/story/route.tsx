@@ -32,7 +32,7 @@ export async function GET(
     const supabase = createAdminClient();
     const { data: profile } = await supabase
       .from("profiles")
-      .select("username, display_name, bio, avatar_url, theme, verified")
+      .select("username, display_name, bio, avatar_url, theme")
       .eq("username", params.username.toLowerCase())
       .maybeSingle();
 
@@ -92,19 +92,9 @@ export async function GET(
             )}
           </div>
 
-          {/* Name + verified */}
-          <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 20 }}>
+          {/* Name */}
+          <div style={{ display: "flex", alignItems: "center", marginBottom: 20 }}>
             <span style={{ fontSize: 80, fontWeight: 700, textAlign: "center" }}>{name}</span>
-            {profile.verified && (
-              <div style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                width: 56, height: 56, borderRadius: 9999, background: theme.accent_color, flexShrink: 0,
-              }}>
-                <svg viewBox="0 0 24 24" width={32} height={32} fill="none" stroke="white" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </div>
-            )}
           </div>
 
           {/* Handle */}
