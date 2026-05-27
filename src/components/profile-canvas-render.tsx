@@ -44,7 +44,9 @@ import { DiscordInviteWidget } from "./widgets/discord-invite-widget";
 import { TipJarWidget } from "./widgets/tip-jar-widget";
 import { SpotifyEmbedWidget } from "./widgets/spotify-embed-widget";
 import { TikTokVideoWidget } from "./widgets/tiktok-video-widget";
-import type { TipPlatform } from "@/lib/widgets/types";
+import { StreamScheduleWidget } from "./widgets/stream-schedule-widget";
+import { CrossPromoWidget } from "./widgets/cross-promo-widget";
+import type { TipPlatform, StreamScheduleMeta, CrossPromoMeta } from "@/lib/widgets/types";
 import type { SpotifyEntityType } from "@/lib/widgets/spotify";
 import type { ProfileRenderData } from "./profile-render";
 
@@ -159,6 +161,7 @@ export function ProfileCanvasRender({
             preview={preview}
             widgetData={widgetData}
             userFonts={userFonts}
+            username={profile.username}
           />
         ))}
 
@@ -186,12 +189,14 @@ function ElementBox({
   preview,
   widgetData,
   userFonts,
+  username,
 }: {
   element: Element;
   theme: Theme;
   preview: boolean;
   widgetData: Record<string, WidgetData | undefined>;
   userFonts: UserFontRecord[];
+  username: string;
 }) {
   const wrapperStyle: React.CSSProperties = {
     left: element.x,
@@ -214,6 +219,7 @@ function ElementBox({
         preview={preview}
         widgetData={widgetData}
         userFonts={userFonts}
+        username={username}
       />
     </div>
   );
@@ -225,12 +231,14 @@ function ElementContent({
   preview,
   widgetData,
   userFonts,
+  username,
 }: {
   element: Element;
   theme: Theme;
   preview: boolean;
   widgetData: Record<string, WidgetData | undefined>;
   userFonts: UserFontRecord[];
+  username: string;
 }) {
   const override = readBlockTypographyOverride(element.meta);
   const radiusClass = buttonRadiusClass(theme.button_shape);
@@ -312,6 +320,7 @@ function ElementContent({
         theme={theme}
         widgetData={widgetData}
         preview={preview}
+        username={username}
       />
     );
   }
@@ -430,11 +439,13 @@ function WidgetElement({
   theme,
   widgetData,
   preview,
+  username,
 }: {
   element: Element;
   theme: Theme;
   widgetData: Record<string, WidgetData | undefined>;
   preview: boolean;
+  username: string;
 }) {
   const wd = widgetData[element.id];
   const size: WidgetSize = isWidgetSize((element.meta as { size?: unknown } | null)?.size)
@@ -560,6 +571,19 @@ function WidgetElement({
     const video_id = meta.video_id as string | undefined;
     if (!username || !video_id) return null;
     return <TikTokVideoWidget username={username} videoId={video_id} theme={theme} size={size} preview={preview} />;
+  }
+  if (kind === "cross_promo") {
+    return <CrossPromoWidget data={meta as unknown as CrossPromoMeta} size={size} preview={preview} />;
+  }
+  if (kind === "stream_schedule") {
+    return (
+      <StreamScheduleWidget
+        data={meta as unknown as StreamScheduleMeta}
+        theme={theme}
+        size={size}
+        icalUrl={preview ? undefined : `/api/ical/${username}`}
+      />
+    );
   }
   return null;
 }
