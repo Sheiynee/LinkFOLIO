@@ -13,6 +13,7 @@ import type { Block } from "@/lib/blocks";
 import { BLOCK_LABELS } from "@/lib/blocks";
 import { OnboardingChecklist } from "./onboarding-checklist";
 import { ShareButton } from "@/components/share-button";
+import { StoryShareButton } from "@/components/story-share-button";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -78,6 +79,7 @@ export default async function DashboardPage() {
             View page
           </Link>
           <ShareButton url={absolutePublicUrl} label={`@${profile.username} on LinkFolio`} />
+          <StoryShareButton username={profile.username} />
           <ThemeToggle />
           <Avatar className="h-8 w-8">
             <AvatarImage src={profile.avatar_url ?? session.user.image ?? ""} />

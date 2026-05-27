@@ -71,6 +71,12 @@ export async function loadWidgetData(rows: WidgetCarrier[]): Promise<Record<stri
       if (kind === "tip_jar") return [row.id, { kind: "tip_jar", data: null }];
       if (kind === "spotify_embed") return [row.id, { kind: "spotify_embed", data: null }];
       if (kind === "tiktok_video") return [row.id, { kind: "tiktok_video", data: null }];
+      if (kind === "stream_schedule") {
+        return [row.id, { kind: "stream_schedule", data: (meta as unknown as import("./types").StreamScheduleMeta) ?? null }];
+      }
+      if (kind === "cross_promo") {
+        return [row.id, { kind: "cross_promo", data: (meta as unknown as import("./types").CrossPromoMeta) ?? null }];
+      }
       return null;
     })
   );

@@ -19,7 +19,7 @@ export default async function SettingsPage() {
   const [{ data: profile }, usage, { data: linkedProviderData }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("username, display_name, bio, avatar_url, deleted_at, deleted_grace_until")
+      .select("username, display_name, bio, avatar_url, deleted_at, deleted_grace_until, verified")
       .eq("id", session.user.id)
       .single(),
     getUserStorageUsage(session.user.id),
@@ -41,8 +41,20 @@ export default async function SettingsPage() {
       <div className="max-w-2xl mx-auto px-6 py-8 space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>Edit profile</CardTitle>
-            <CardDescription>This is what visitors see on your public page.</CardDescription>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <CardTitle>Edit profile</CardTitle>
+                <CardDescription>This is what visitors see on your public page.</CardDescription>
+              </div>
+              {profile.verified && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs font-medium text-blue-500 shrink-0">
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  Verified creator
+                </span>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <ProfileForm initial={profile} />

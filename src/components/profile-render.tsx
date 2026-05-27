@@ -27,7 +27,9 @@ import { DiscordInviteWidget } from "./widgets/discord-invite-widget";
 import { TipJarWidget } from "./widgets/tip-jar-widget";
 import { SpotifyEmbedWidget } from "./widgets/spotify-embed-widget";
 import { TikTokVideoWidget } from "./widgets/tiktok-video-widget";
-import type { TipPlatform } from "@/lib/widgets/types";
+import { StreamScheduleWidget } from "./widgets/stream-schedule-widget";
+import { CrossPromoWidget } from "./widgets/cross-promo-widget";
+import type { TipPlatform, StreamScheduleMeta, CrossPromoMeta } from "@/lib/widgets/types";
 import type { SpotifyEntityType } from "@/lib/widgets/spotify";
 
 export interface ProfileRenderData {
@@ -36,6 +38,7 @@ export interface ProfileRenderData {
   bio: string | null;
   avatar_url: string | null;
   blocks: Block[];
+  verified?: boolean;
 }
 
 export function ProfileRender({
@@ -94,7 +97,20 @@ export function ProfileRender({
         )}
       </div>
 
-      <h1 className="text-2xl font-bold mb-1" style={displayStyle}>{name}</h1>
+      <h1 className="text-2xl font-bold mb-1 flex items-center gap-2" style={displayStyle}>
+        {name}
+        {profile.verified && (
+          <span
+            title="Verified creator"
+            className="inline-flex items-center justify-center rounded-full w-5 h-5 shrink-0"
+            style={{ backgroundColor: theme.accent_color }}
+          >
+            <svg viewBox="0 0 24 24" className="w-3 h-3" fill="none" stroke="white" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </span>
+        )}
+      </h1>
       <p className="mb-4 text-sm" style={{ ...monoStyle, color: theme.muted_color }}>
         @{profile.username}
       </p>
@@ -357,6 +373,29 @@ export function ProfileRender({
                       username={meta.username}
                       videoId={meta.video_id}
                       theme={theme}
+                      size={widgetSize}
+                      preview={preview}
+                    />
+                  );
+                }
+                if (block.widget_kind === "stream_schedule") {
+                  const data = wd?.kind === "stream_schedule" ? wd.data : (block.meta as StreamScheduleMeta | null);
+                  return (
+                    <StreamScheduleWidget
+                      key={block.id}
+                      data={data}
+                      theme={theme}
+                      size={widgetSize}
+                      icalUrl={preview ? undefined : `/api/ical/${profile.username}`}
+                    />
+                  );
+                }
+                if (block.widget_kind === "cross_promo") {
+                  const data = wd?.kind === "cross_promo" ? wd.data : (block.meta as CrossPromoMeta | null);
+                  return (
+                    <CrossPromoWidget
+                      key={block.id}
+                      data={data}
                       size={widgetSize}
                       preview={preview}
                     />

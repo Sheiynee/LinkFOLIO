@@ -28,6 +28,7 @@ interface LoadedProfile {
   avatar_url: string | null;
   theme: unknown;
   layout_mode: LayoutMode;
+  verified: boolean | null;
   blocks: Block[];
   elements: Element[];
 }
@@ -36,7 +37,7 @@ async function getProfile(username: string): Promise<LoadedProfile | null> {
   const supabase = createAdminClient();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, username, display_name, bio, avatar_url, theme, layout_mode, deleted_at")
+    .select("id, username, display_name, bio, avatar_url, theme, layout_mode, deleted_at, verified")
     .eq("username", username.toLowerCase())
     .maybeSingle();
 
@@ -123,6 +124,7 @@ export default async function PublicProfilePage({ params }: Props) {
     bio: profile.bio,
     avatar_url: profile.avatar_url,
     blocks: profile.blocks,
+    verified: profile.verified ?? false,
   };
 
   const hasLiveWidget = carriers.some(

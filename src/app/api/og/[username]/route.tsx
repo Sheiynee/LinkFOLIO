@@ -47,7 +47,7 @@ export async function GET(
     const supabase = createAdminClient();
     const { data: profile, error } = await supabase
       .from("profiles")
-      .select("id, username, display_name, bio, avatar_url, theme")
+      .select("id, username, display_name, bio, avatar_url, theme, verified")
       .eq("username", params.username.toLowerCase())
       .maybeSingle();
 
@@ -156,6 +156,24 @@ export async function GET(
                 }}
               >
                 {name}
+                {profile.verified && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: 44,
+                      height: 44,
+                      borderRadius: 9999,
+                      background: theme.accent_color,
+                      flexShrink: 0,
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" width={26} height={26} fill="none" stroke="white" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </div>
+                )}
                 {isLive && (
                   <span
                     style={{

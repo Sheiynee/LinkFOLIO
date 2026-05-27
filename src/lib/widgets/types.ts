@@ -18,7 +18,9 @@ export type WidgetKind =
   | "github_user"
   | "discord_invite"
   | "tip_jar"
-  | "og_card";
+  | "og_card"
+  | "stream_schedule"
+  | "cross_promo";
 
 export interface TwitchLiveMeta {
   channel: string;
@@ -138,6 +140,29 @@ export interface TipJarMeta {
   handle: string;
 }
 
+export type CrossPromoPlatform = "twitch" | "youtube" | "spotify" | "instagram" | "twitter" | "tiktok";
+
+export interface CrossPromoMeta {
+  platform: CrossPromoPlatform;
+  handle: string;
+  url: string;
+  cta?: string;
+}
+
+export interface ScheduleEvent {
+  id: string;
+  day: "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+  startTime: string;
+  endTime?: string;
+  label: string;
+}
+
+export interface StreamScheduleMeta {
+  timezone: string;
+  events: ScheduleEvent[];
+  note?: string;
+}
+
 export type WidgetData =
   | { kind: "twitch_live"; data: TwitchLiveData | null }
   | { kind: "twitch_vod"; data: TwitchVodData | null }
@@ -151,4 +176,6 @@ export type WidgetData =
   | { kind: "tip_jar"; data: null }
   | { kind: "spotify_embed"; data: null }
   | { kind: "tiktok_video"; data: null }
+  | { kind: "stream_schedule"; data: StreamScheduleMeta | null }
+  | { kind: "cross_promo"; data: CrossPromoMeta | null }
   | { kind: "unsupported"; data: null };

@@ -133,8 +133,26 @@ export function resolveWidget(kind: WidgetKind | "auto", input: string): Resolve
     return { error: "Paste a Ko-fi, Buy Me a Coffee, Patreon, or Streamlabs URL" };
   }
 
+  if (kind === "cross_promo") {
+    const detected = detectCrossPromoFromUrl(trimmed);
+    if (detected) return { kind, meta: detected.meta as unknown as Record<string, unknown>, title: detected.title };
+    return { error: "Paste a social profile URL (Twitch, YouTube, TikTok, Instagram, Twitter/X, or Spotify)" };
+  }
+
+  if (kind === "stream_schedule") {
+    // stream_schedule is configured via a dedicated form, not a URL.
+    // This branch handles the case where the picker submits an empty/placeholder string.
+    return {
+      kind,
+      meta: { timezone: "UTC", events: [] },
+      title: "Stream schedule",
+    };
+  }
+
   return { error: "Widget kind not implemented yet" };
 }
+
+import { detectCrossPromoFromUrl } from "./cross-promo";
 
 // Picker metadata moved to `./picker-specs.ts` so the canvas client can
 // import it without pulling in the server-only API fetchers this module
