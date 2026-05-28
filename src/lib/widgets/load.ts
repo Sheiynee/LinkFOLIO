@@ -4,6 +4,9 @@ import { getYouTubeChannel, getYouTubeLatestVideo, getYouTubeLiveStatus } from "
 import { getGitHubRepo, getGitHubUser } from "./github";
 import { getDiscordInvite } from "./discord";
 import { fetchOgCard } from "./og-scraper";
+import { getLastFmScrobbles } from "./lastfm";
+import { getSteamProfile } from "./steam";
+import { getLetterboxdFilms } from "./letterboxd";
 
 const CROSS_PROMO_PLATFORMS: CrossPromoPlatform[] = ["twitch", "youtube", "spotify", "instagram", "twitter", "tiktok"];
 
@@ -100,6 +103,21 @@ export async function loadWidgetData(rows: WidgetCarrier[]): Promise<Record<stri
       }
       if (kind === "cross_promo") {
         return [row.id, { kind: "cross_promo", data: readCrossPromoMeta(meta) }];
+      }
+      if (kind === "lastfm_scrobbles") {
+        const username = meta.username as string | undefined;
+        if (!username) return null;
+        return [row.id, { kind: "lastfm_scrobbles", data: await getLastFmScrobbles(username) }];
+      }
+      if (kind === "steam_profile") {
+        const username = meta.username as string | undefined;
+        if (!username) return null;
+        return [row.id, { kind: "steam_profile", data: await getSteamProfile(username) }];
+      }
+      if (kind === "letterboxd_films") {
+        const username = meta.username as string | undefined;
+        if (!username) return null;
+        return [row.id, { kind: "letterboxd_films", data: await getLetterboxdFilms(username) }];
       }
       return null;
     })

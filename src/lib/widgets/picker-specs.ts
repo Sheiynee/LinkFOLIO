@@ -25,6 +25,9 @@ export const WIDGET_PICKER_SPECS: WidgetPickerSpec[] = [
   { kind: "tiktok_video",    label: "TikTok video",      placeholder: "tiktok.com/@user/video/…" },
   { kind: "tip_jar",         label: "Tip jar",           placeholder: "ko-fi.com/username" },
   { kind: "og_card",         label: "Generic link card", placeholder: "https://…" },
-  { kind: "cross_promo",     label: "Cross-promote",     placeholder: "instagram.com/username" },
-  { kind: "stream_schedule", label: "Stream schedule",   placeholder: "Add schedule →" },
+  { kind: "cross_promo",       label: "Cross-promote",       placeholder: "instagram.com/username" },
+  { kind: "stream_schedule",   label: "Stream schedule",     placeholder: "Add schedule →" },
+  { kind: "lastfm_scrobbles",  label: "Last.fm scrobbles",   placeholder: "last.fm/user/username" },
+  { kind: "steam_profile",     label: "Steam profile",       placeholder: "steamcommunity.com/id/…" },
+  { kind: "letterboxd_films",  label: "Letterboxd films",    placeholder: "letterboxd.com/username" },
 ];

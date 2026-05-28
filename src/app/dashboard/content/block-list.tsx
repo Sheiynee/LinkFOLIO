@@ -25,12 +25,15 @@ import {
   MessageCircle,
   Coffee,
   Music,
+  Music2,
   Video,
   Link as LinkIcon,
   PlaySquare,
   Rows3,
   Square,
   LayoutGrid,
+  Gamepad2,
+  Film,
 } from "lucide-react";
 import { WIDGET_PICKER_SPECS } from "@/lib/widgets/picker-specs";
 import type { WidgetKind } from "@/lib/widgets/types";
@@ -376,7 +379,10 @@ type WidgetPickerKind =
   | "youtube_live"
   | "og_card"
   | "cross_promo"
-  | "stream_schedule";
+  | "stream_schedule"
+  | "lastfm_scrobbles"
+  | "steam_profile"
+  | "letterboxd_films";
 
 function widgetKindLabel(kind: Block["widget_kind"]): string {
   switch (kind) {
@@ -394,6 +400,9 @@ function widgetKindLabel(kind: Block["widget_kind"]): string {
     case "og_card": return "Link card";
     case "cross_promo": return "Cross-promote";
     case "stream_schedule": return "Stream schedule";
+    case "lastfm_scrobbles": return "Last.fm";
+    case "steam_profile": return "Steam";
+    case "letterboxd_films": return "Letterboxd";
     default: return "Widget";
   }
 }
@@ -442,6 +451,9 @@ const WIDGET_LABELS: Record<WidgetPickerKind, string> = {
   og_card: "Generic link card",
   cross_promo: "Cross-promote",
   stream_schedule: "Stream schedule",
+  lastfm_scrobbles: "Last.fm scrobbles",
+  steam_profile: "Steam profile",
+  letterboxd_films: "Letterboxd films",
 };
 
 const WIDGET_PLACEHOLDERS: Record<WidgetPickerKind, string> = {
@@ -460,6 +472,9 @@ const WIDGET_PLACEHOLDERS: Record<WidgetPickerKind, string> = {
   og_card: "Any https:// URL",
   cross_promo: "https://instagram.com/username  (or TikTok, YouTube, Twitter, Twitch, Spotify)",
   stream_schedule: "",
+  lastfm_scrobbles: "yourname or https://last.fm/user/yourname",
+  steam_profile: "yourname or https://steamcommunity.com/id/yourname",
+  letterboxd_films: "yourname or https://letterboxd.com/yourname",
 };
 
 const WIDGET_HINTS: Record<WidgetPickerKind, string> = {
@@ -478,6 +493,9 @@ const WIDGET_HINTS: Record<WidgetPickerKind, string> = {
   og_card: "Fetches the page's OG metadata (title, description, image) for any URL.",
   cross_promo: "Paste your profile URL from Instagram, TikTok, YouTube, Twitter/X, Twitch, or Spotify. Creates a branded follow button.",
   stream_schedule: "Creates an empty schedule widget. Edit it after adding to fill in your days and times.",
+  lastfm_scrobbles: "Shows your most recently scrobbled track and 'Now Playing' status. Updates every minute.",
+  steam_profile: "Shows your Steam avatar, online status, and recently played games. Updates every 5 min.",
+  letterboxd_films: "Shows your most recently logged film with poster, title, and star rating. Updates every 30 min.",
 };
 
 const WIDGET_ICONS: Record<WidgetKind, React.ComponentType<{ className?: string }>> = {
@@ -493,8 +511,11 @@ const WIDGET_ICONS: Record<WidgetKind, React.ComponentType<{ className?: string 
   tiktok_video:    Video,
   tip_jar:         Coffee,
   og_card:         LinkIcon,
-  cross_promo:     Sparkles,
-  stream_schedule: Radio,
+  cross_promo:       Sparkles,
+  stream_schedule:   Radio,
+  lastfm_scrobbles:  Music2,
+  steam_profile:     Gamepad2,
+  letterboxd_films:  Film,
 };
 
 function WidgetPicker({

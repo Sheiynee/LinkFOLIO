@@ -7,6 +7,9 @@ import { parseTipJarUrl, TIP_PLATFORMS } from "./tip-jar";
 import { parseSpotifyUrl } from "./spotify";
 import { parseTikTokUrl } from "./tiktok";
 import { isProbablyValidUrl } from "./og-scraper";
+import { parseLastFmUsername } from "./lastfm";
+import { parseSteamInput } from "./steam";
+import { parseLetterboxdUsername } from "./letterboxd";
 import type { WidgetKind } from "./types";
 
 /**
@@ -147,6 +150,26 @@ export function resolveWidget(kind: WidgetKind | "auto", input: string): Resolve
       meta: { timezone: "UTC", events: [] },
       title: "Stream schedule",
     };
+  }
+
+  if (kind === "lastfm_scrobbles") {
+    const username = parseLastFmUsername(trimmed) ?? trimmed;
+    if (!/^[a-zA-Z0-9_-]{2,15}$/.test(username)) {
+      return { error: "Enter a Last.fm username or last.fm/user/… URL" };
+    }
+    return { kind, meta: { username }, title: `${username} on Last.fm` };
+  }
+
+  if (kind === "steam_profile") {
+    const value = parseSteamInput(trimmed);
+    if (!value) return { error: "Enter a Steam vanity URL, steamcommunity.com URL, or Steam64 ID" };
+    return { kind, meta: { username: value }, title: `Steam — ${value}` };
+  }
+
+  if (kind === "letterboxd_films") {
+    const username = parseLetterboxdUsername(trimmed);
+    if (!username) return { error: "Enter a Letterboxd username or letterboxd.com/… URL" };
+    return { kind, meta: { username }, title: `${username} on Letterboxd` };
   }
 
   return { error: "Widget kind not implemented yet" };

@@ -23,6 +23,9 @@ import { SpotifyEmbedWidget } from "./widgets/spotify-embed-widget";
 import { TikTokVideoWidget } from "./widgets/tiktok-video-widget";
 import { StreamScheduleWidget } from "./widgets/stream-schedule-widget";
 import { CrossPromoWidget } from "./widgets/cross-promo-widget";
+import { LastFmScrobblesWidget } from "./widgets/lastfm-scrobbles-widget";
+import { SteamProfileWidget } from "./widgets/steam-profile-widget";
+import { LetterboxdFilmsWidget } from "./widgets/letterboxd-films-widget";
 
 export interface WidgetRendererProps {
   id: string;
@@ -169,6 +172,21 @@ export function WidgetRenderer({
       (wd?.kind === "cross_promo" ? wd.data : null) ??
       (meta as unknown as CrossPromoMeta | null);
     return <CrossPromoWidget data={data} size={size} preview={preview} />;
+  }
+  if (kind === "lastfm_scrobbles") {
+    const lfmUsername = (meta.username as string | undefined) ?? title ?? "";
+    const data = wd?.kind === "lastfm_scrobbles" ? wd.data : null;
+    return <LastFmScrobblesWidget username={lfmUsername} data={data} theme={theme} size={size} preview={preview} />;
+  }
+  if (kind === "steam_profile") {
+    const steamUsername = (meta.username as string | undefined) ?? title ?? "";
+    const data = wd?.kind === "steam_profile" ? wd.data : null;
+    return <SteamProfileWidget username={steamUsername} data={data} theme={theme} size={size} preview={preview} />;
+  }
+  if (kind === "letterboxd_films") {
+    const lbxUsername = (meta.username as string | undefined) ?? title ?? "";
+    const data = wd?.kind === "letterboxd_films" ? wd.data : null;
+    return <LetterboxdFilmsWidget username={lbxUsername} data={data} theme={theme} size={size} preview={preview} />;
   }
   return null;
 }

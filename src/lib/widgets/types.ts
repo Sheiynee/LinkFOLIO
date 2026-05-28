@@ -20,7 +20,10 @@ export type WidgetKind =
   | "tip_jar"
   | "og_card"
   | "stream_schedule"
-  | "cross_promo";
+  | "cross_promo"
+  | "lastfm_scrobbles"
+  | "steam_profile"
+  | "letterboxd_films";
 
 export interface TwitchLiveMeta {
   channel: string;
@@ -163,6 +166,53 @@ export interface StreamScheduleMeta {
   note?: string;
 }
 
+export interface LastFmTrack {
+  name: string;
+  artist: string;
+  album: string | null;
+  image_url: string | null;
+  url: string;
+  now_playing: boolean;
+  date: string | null;
+}
+
+export interface LastFmScrobblesData {
+  username: string;
+  user_url: string;
+  tracks: LastFmTrack[];
+}
+
+export interface SteamProfileData {
+  steam_id: string;
+  username: string;
+  avatar_url: string;
+  profile_url: string;
+  persona_state: string;
+  is_online: boolean;
+  currently_playing: string | null;
+  recent_games: {
+    appid: number;
+    name: string;
+    playtime_2weeks: number;
+    icon_url: string | null;
+  }[];
+}
+
+export interface LetterboxdFilm {
+  title: string;
+  year: number | null;
+  rating: number | null;
+  watched_date: string | null;
+  link: string;
+  poster_url: string | null;
+}
+
+export interface LetterboxdFilmsData {
+  username: string;
+  films: LetterboxdFilm[];
+  profile_url: string;
+}
+
 export type WidgetData =
   | { kind: "twitch_live"; data: TwitchLiveData | null }
   | { kind: "twitch_vod"; data: TwitchVodData | null }
@@ -178,4 +228,7 @@ export type WidgetData =
   | { kind: "tiktok_video"; data: null }
   | { kind: "stream_schedule"; data: StreamScheduleMeta | null }
   | { kind: "cross_promo"; data: CrossPromoMeta | null }
+  | { kind: "lastfm_scrobbles"; data: LastFmScrobblesData | null }
+  | { kind: "steam_profile"; data: SteamProfileData | null }
+  | { kind: "letterboxd_films"; data: LetterboxdFilmsData | null }
   | { kind: "unsupported"; data: null };

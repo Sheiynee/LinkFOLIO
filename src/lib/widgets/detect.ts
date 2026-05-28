@@ -7,6 +7,9 @@ import { parseTipJarUrl } from "./tip-jar";
 import { parseSpotifyUrl } from "./spotify";
 import { parseTikTokUrl } from "./tiktok";
 import { isProbablyValidUrl } from "./og-scraper";
+import { parseLastFmUsername } from "./lastfm";
+import { parseSteamInput } from "./steam";
+import { parseLetterboxdUsername } from "./letterboxd";
 
 export interface DetectedWidget {
   kind: WidgetKind;
@@ -97,6 +100,21 @@ export function detectWidgetFromUrl(input: string): DetectedWidget | null {
         ? `YouTube channel — @${yt.handle}`
         : "YouTube channel",
     };
+  }
+
+  const lfm = /last\.fm/i.test(raw) ? parseLastFmUsername(raw) : null;
+  if (lfm) {
+    return { kind: "lastfm_scrobbles", meta: { username: lfm }, label: `Last.fm — ${lfm}` };
+  }
+
+  const steam = /steamcommunity\.com/i.test(raw) ? parseSteamInput(raw) : null;
+  if (steam) {
+    return { kind: "steam_profile", meta: { username: steam }, label: `Steam — ${steam}` };
+  }
+
+  const lbd = /letterboxd\.com/i.test(raw) ? parseLetterboxdUsername(raw) : null;
+  if (lbd) {
+    return { kind: "letterboxd_films", meta: { username: lbd }, label: `Letterboxd — ${lbd}` };
   }
 
   // Final fallback: any valid http(s) URL becomes a generic OG card.
