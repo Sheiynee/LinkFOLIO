@@ -297,8 +297,8 @@ E2E runs separately on a schedule or pre-deploy hook (requires a running Vercel 
 [x] Create playwright.config.ts
 [x] Add test scripts to package.json
 [x] Add .github/workflows/ci.yml
-[x] Write Priority 1 tests (pure functions) — 159 tests, all passing
-[ ] Write Priority 2 tests (server actions with mocked Supabase)
+[x] Write Priority 1 tests (pure functions) — 161 tests, all passing
+[x] Write Priority 2 tests (server actions with mocked Supabase) — 61 tests, all passing
 [ ] Write Priority 3 tests (API routes)
 [ ] Write Priority 4 E2E tests (critical happy paths)
 ```
