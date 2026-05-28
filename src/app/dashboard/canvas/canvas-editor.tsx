@@ -421,6 +421,26 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
       if (g.type !== "marquee" && g.moved) {
         // Commit a history snapshot for this gesture.
         history.push(beforeGestureRef.current);
+
+        // Flush pending debounced saves immediately so a quick browser
+        // refresh after lifting the pointer doesn't lose the final position.
+        const timers = saveTimers.current;
+        const ids = g.type === "drag" ? g.ids : [g.id];
+        for (const id of ids) {
+          const pending = timers.get(id);
+          if (!pending) continue;
+          clearTimeout(pending);
+          timers.delete(id);
+          const el = elementsRef.current.find((e) => e.id === id);
+          if (!el) continue;
+          startTransition(async () => {
+            const isMobile = viewRef.current === "mobile";
+            const res = isMobile
+              ? await updateMobilePlacements([{ id, mobile_x: el.mobile_x ?? null, mobile_y: el.mobile_y ?? null, mobile_w: el.mobile_w ?? null, mobile_h: el.mobile_h ?? null }])
+              : await updateElement(id, { x: el.x, y: el.y, w: el.w, h: el.h, rotation: el.rotation });
+            if (res.error) setError(res.error);
+          });
+        }
       }
       gestureRef.current = null;
       // Treat a click-without-drag inside the marquee gesture as a deselect.
