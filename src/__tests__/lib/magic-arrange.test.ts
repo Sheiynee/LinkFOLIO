@@ -4,7 +4,6 @@ import {
   arrangeGrid,
   arrangeAsymmetric,
   arrangeHero,
-  type ArrangePatch,
 } from "@/lib/magic-arrange";
 import type { Element } from "@/lib/elements";
 import { CANVAS_WIDTH } from "@/lib/elements";
