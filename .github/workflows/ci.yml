@@ -12,3 +12,17 @@ jobs:
       - run: npm install
       - run: npm run test
       - run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder_anon_key
+          SUPABASE_SERVICE_ROLE_KEY: placeholder_service_role_key
+          SUPABASE_JWT_SECRET: placeholder_jwt_secret
+          AUTH_SECRET: placeholder_auth_secret_32_chars_min
+          NEXTAUTH_URL: http://localhost:3000
+          AUTH_GOOGLE_ID: placeholder
+          AUTH_GOOGLE_SECRET: placeholder
+          AUTH_GITHUB_ID: placeholder
+          AUTH_GITHUB_SECRET: placeholder
+          RESEND_API_KEY: re_placeholder
+          EMAIL_FROM: noreply@placeholder.com
+          CRON_SECRET: placeholder_cron_secret
