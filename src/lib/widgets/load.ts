@@ -1,9 +1,33 @@
-import type { WidgetData, WidgetKind } from "./types";
+import type { WidgetData, WidgetKind, CrossPromoMeta, CrossPromoPlatform, StreamScheduleMeta } from "./types";
 import { getTwitchLiveStatus, getTwitchLatestVod } from "./twitch";
 import { getYouTubeChannel, getYouTubeLatestVideo, getYouTubeLiveStatus } from "./youtube";
 import { getGitHubRepo, getGitHubUser } from "./github";
 import { getDiscordInvite } from "./discord";
 import { fetchOgCard } from "./og-scraper";
+
+const CROSS_PROMO_PLATFORMS: CrossPromoPlatform[] = ["twitch", "youtube", "spotify", "instagram", "twitter", "tiktok"];
+
+function readCrossPromoMeta(meta: Record<string, unknown>): CrossPromoMeta | null {
+  if (!CROSS_PROMO_PLATFORMS.includes(meta.platform as CrossPromoPlatform)) return null;
+  if (typeof meta.handle !== "string" || !meta.handle) return null;
+  if (typeof meta.url !== "string" || !meta.url) return null;
+  return {
+    platform: meta.platform as CrossPromoPlatform,
+    handle: meta.handle,
+    url: meta.url,
+    ...(typeof meta.cta === "string" ? { cta: meta.cta } : {}),
+  };
+}
+
+function readStreamScheduleMeta(meta: Record<string, unknown>): StreamScheduleMeta | null {
+  if (typeof meta.timezone !== "string") return null;
+  if (!Array.isArray(meta.events)) return null;
+  return {
+    timezone: meta.timezone,
+    events: meta.events as StreamScheduleMeta["events"],
+    ...(typeof meta.note === "string" ? { note: meta.note } : {}),
+  };
+}
 
 export interface WidgetCarrier {
   id: string;
@@ -72,10 +96,10 @@ export async function loadWidgetData(rows: WidgetCarrier[]): Promise<Record<stri
       if (kind === "spotify_embed") return [row.id, { kind: "spotify_embed", data: null }];
       if (kind === "tiktok_video") return [row.id, { kind: "tiktok_video", data: null }];
       if (kind === "stream_schedule") {
-        return [row.id, { kind: "stream_schedule", data: (meta as unknown as import("./types").StreamScheduleMeta) ?? null }];
+        return [row.id, { kind: "stream_schedule", data: readStreamScheduleMeta(meta) }];
       }
       if (kind === "cross_promo") {
-        return [row.id, { kind: "cross_promo", data: (meta as unknown as import("./types").CrossPromoMeta) ?? null }];
+        return [row.id, { kind: "cross_promo", data: readCrossPromoMeta(meta) }];
       }
       return null;
     })
