@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { normalizeTheme, type Theme } from "@/lib/themes";
+import { normalizeTheme } from "@/lib/themes";
 import { ogBackground } from "@/lib/og-helpers";
 
 export const runtime = "nodejs";
