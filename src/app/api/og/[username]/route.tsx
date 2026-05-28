@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeTheme, type Theme } from "@/lib/themes";
-import { gradientCss } from "@/lib/backgrounds";
+import { ogBackground } from "@/lib/og-helpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -265,21 +265,6 @@ export async function GET(
   }
 }
 
-/**
- * next/og's satori renderer supports only linear-gradient + solid colors as
- * background, so OG cards collapse the layered background to its first
- * gradient layer (or first color we can find).
- */
-function ogBackground(theme: Theme): string {
-  for (const layer of theme.background.layers) {
-    if (layer.visible === false) continue;
-    if (layer.type === "gradient") return gradientCss(layer);
-    if (layer.type === "image") return `url(${layer.url})`;
-    if (layer.type === "mesh" && layer.blobs[0]) return layer.blobs[0].color;
-    if (layer.type === "pattern") return layer.color;
-  }
-  return "#0f172a";
-}
 
 function truncate(s: string, n: number): string {
   if (s.length <= n) return s;

@@ -311,22 +311,22 @@ Known code quality issues worth addressing before the codebase grows further. No
 
 ### High priority
 
-**1. Deduplicate widget renderer dispatch**
-`profile-render.tsx` and `profile-canvas-render.tsx` contain near-identical `if (kind === "twitch_live") ...` chains for all 15 widget kinds. Every new widget kind requires updating both files (which caused the canvas cross-promo bug). Extract a shared `<WidgetRenderer kind meta theme size preview />` server component and replace both switch blocks with it.
+**1. Deduplicate widget renderer dispatch** ✅
+Extracted `src/components/widget-renderer.tsx` — single `<WidgetRenderer>` component shared by both renderers. Adding a widget kind now only requires updating one file.
 
-**2. Eliminate prop-drilling `username` through canvas renderer**
-`username` is passed `ProfileCanvasRender → ElementBox → ElementContent → WidgetElement` purely for the ICS calendar link in `StreamScheduleWidget`. Replace with a React Context (`CanvasProfileContext`) so only the components that need it (currently just `StreamScheduleWidget`) reach for it. If this is done, remove the `username` param from `ElementBox`, `ElementContent`, and `WidgetElement`.
+**2. Eliminate prop-drilling `username` through canvas renderer** ✅ (partial)
+`WidgetElement` is gone — replaced by `WidgetRenderer`. The `username` prop still threads through `ElementBox → ElementContent` because these are server components and cannot use React Context. Full elimination requires converting them to client components (deferred).
 
-**3. Data-drive the content editor widget picker**
-`block-list.tsx` has a hardcoded button grid for every widget kind (over 100 lines of JSX). `WIDGET_PICKER_SPECS` in `picker-specs.ts` already has all the metadata. Rewrite `WidgetPicker` to map over `WIDGET_PICKER_SPECS` rather than listing buttons manually. This is what caused the "cross-promo not in picker" bug when new widget kinds were added.
+**3. Data-drive the content editor widget picker** ✅
+`WidgetPicker` now maps over `WIDGET_PICKER_SPECS` + a `WIDGET_ICONS` record instead of 15 hardcoded buttons. New widget kinds automatically appear in the picker.
 
-**4. Extract shared `ogBackground()` helper**
-The `ogBackground(theme)` function is copy-pasted between `src/app/api/og/[username]/route.tsx` and `src/app/api/og/[username]/story/route.tsx`. Move it to `src/lib/og-helpers.ts` and import it in both.
+**4. Extract shared `ogBackground()` helper** ✅
+Moved to `src/lib/og-helpers.ts`, imported by both OG route files.
 
 ### Medium priority
 
-**5. Centralize `revalidatePublicPage`**
-`revalidatePublicPage(userId)` is duplicated in `dashboard/content/actions.ts` and `dashboard/canvas/actions.ts`. Extract to `src/lib/revalidate.ts` and import everywhere.
+**5. Centralize `revalidatePublicPage`** ✅
+Extracted to `src/lib/revalidate.ts`. Both action files import from there; canvas `revalidateUserPages` now calls it directly and `getUsernameForUser` is removed.
 
 **6. Replace `as unknown as X` casts in `load.ts`**
 The `stream_schedule` and `cross_promo` dispatch in `load.ts` uses `meta as unknown as StreamScheduleMeta` because `meta` is typed as `Record<string, unknown>`. Add a lightweight runtime validator (e.g. a `parseStreamScheduleMeta(meta)` function that checks required fields) so these casts are type-safe and catch corrupt DB rows early.

@@ -1,23 +1,12 @@
 import { ImageResponse } from "next/og";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeTheme, type Theme } from "@/lib/themes";
-import { gradientCss } from "@/lib/backgrounds";
+import { ogBackground } from "@/lib/og-helpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const SIZE = { width: 1080, height: 1920 };
-
-function ogBackground(theme: Theme): string {
-  for (const layer of theme.background.layers) {
-    if (layer.visible === false) continue;
-    if (layer.type === "gradient") return gradientCss(layer);
-    if (layer.type === "image") return `url(${layer.url})`;
-    if (layer.type === "mesh" && layer.blobs[0]) return layer.blobs[0].color;
-    if (layer.type === "pattern") return layer.color;
-  }
-  return "#0f172a";
-}
 
 function getSiteHost(req: Request): string {
   if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;

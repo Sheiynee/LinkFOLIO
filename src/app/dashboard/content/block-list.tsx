@@ -32,6 +32,8 @@ import {
   Square,
   LayoutGrid,
 } from "lucide-react";
+import { WIDGET_PICKER_SPECS } from "@/lib/widgets/picker-specs";
+import type { WidgetKind } from "@/lib/widgets/types";
 import { createBlock, createWidgetBlock, updateWidgetBlock, updateWidgetSize, updateBlock, deleteBlock, reorderBlocks, toggleBlockVisibility } from "./actions";
 import type { WidgetSize } from "@/lib/widgets/types";
 import { isWidgetSize } from "@/lib/widgets/types";
@@ -478,6 +480,23 @@ const WIDGET_HINTS: Record<WidgetPickerKind, string> = {
   stream_schedule: "Creates an empty schedule widget. Edit it after adding to fill in your days and times.",
 };
 
+const WIDGET_ICONS: Record<WidgetKind, React.ComponentType<{ className?: string }>> = {
+  twitch_live:     Radio,
+  twitch_vod:      PlaySquare,
+  youtube_channel: Youtube,
+  youtube_video:   Youtube,
+  youtube_live:    Radio,
+  github_repo:     Github,
+  github_user:     Github,
+  discord_invite:  MessageCircle,
+  spotify_embed:   Music,
+  tiktok_video:    Video,
+  tip_jar:         Coffee,
+  og_card:         LinkIcon,
+  cross_promo:     Sparkles,
+  stream_schedule: Radio,
+};
+
 function WidgetPicker({
   onPick,
   onCancel,
@@ -504,146 +523,22 @@ function WidgetPicker({
           <Wand2 className="h-4 w-4 mr-2" />
           Paste a URL — auto-detect
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onPick("twitch_live")}
-          className="justify-start"
-        >
-          <Radio className="h-4 w-4 mr-2" />
-          Twitch live status
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onPick("youtube_channel")}
-          className="justify-start"
-        >
-          <Youtube className="h-4 w-4 mr-2" />
-          YouTube channel
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onPick("youtube_video")}
-          className="justify-start"
-        >
-          <Youtube className="h-4 w-4 mr-2" />
-          YouTube latest video
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onPick("github_repo")}
-          className="justify-start"
-        >
-          <Github className="h-4 w-4 mr-2" />
-          GitHub repo
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onPick("github_user")}
-          className="justify-start"
-        >
-          <Github className="h-4 w-4 mr-2" />
-          GitHub user
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onPick("discord_invite")}
-          className="justify-start"
-        >
-          <MessageCircle className="h-4 w-4 mr-2" />
-          Discord invite
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onPick("tip_jar")}
-          className="justify-start"
-        >
-          <Coffee className="h-4 w-4 mr-2" />
-          Tip jar
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onPick("spotify_embed")}
-          className="justify-start"
-        >
-          <Music className="h-4 w-4 mr-2" />
-          Spotify
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onPick("tiktok_video")}
-          className="justify-start"
-        >
-          <Video className="h-4 w-4 mr-2" />
-          TikTok video
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onPick("twitch_vod")}
-          className="justify-start"
-        >
-          <PlaySquare className="h-4 w-4 mr-2" />
-          Twitch latest VOD
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onPick("youtube_live")}
-          className="justify-start"
-        >
-          <Radio className="h-4 w-4 mr-2" />
-          YouTube live status
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onPick("og_card")}
-          className="justify-start"
-        >
-          <LinkIcon className="h-4 w-4 mr-2" />
-          Generic link card
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onPick("cross_promo")}
-          className="justify-start"
-        >
-          <Sparkles className="h-4 w-4 mr-2" />
-          Cross-promote
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onPick("stream_schedule")}
-          className="justify-start"
-        >
-          <Radio className="h-4 w-4 mr-2" />
-          Stream schedule
-        </Button>
+        {WIDGET_PICKER_SPECS.map((spec) => {
+          const Icon = WIDGET_ICONS[spec.kind];
+          return (
+            <Button
+              key={spec.kind}
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onPick(spec.kind)}
+              className="justify-start"
+            >
+              <Icon className="h-4 w-4 mr-2" />
+              {spec.label}
+            </Button>
+          );
+        })}
       </div>
     </div>
   );

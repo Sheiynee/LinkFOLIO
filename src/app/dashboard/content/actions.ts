@@ -9,16 +9,7 @@ import type { WidgetKind, WidgetSize } from "@/lib/widgets/types";
 import { isWidgetSize } from "@/lib/widgets/types";
 import { resolveWidget } from "@/lib/widgets/resolve";
 import { ensureChannelSubscriptions } from "@/lib/twitch-eventsub";
-
-async function revalidatePublicPage(userId: string) {
-  const supabase = createAdminClient();
-  const { data } = await supabase
-    .from("profiles")
-    .select("username")
-    .eq("id", userId)
-    .single();
-  if (data?.username) revalidatePath(`/${data.username}`);
-}
+import { revalidatePublicPage } from "@/lib/revalidate";
 
 interface CreateInput {
   type: BlockType;

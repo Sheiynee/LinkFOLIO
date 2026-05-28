@@ -11,8 +11,7 @@ import {
   CANVAS_HEIGHT,
 } from "@/lib/elements";
 import { MOBILE_CANVAS_WIDTH, placementsForMobile } from "@/lib/canvas-mobile";
-import type { WidgetData, WidgetSize } from "@/lib/widgets/types";
-import { isWidgetSize } from "@/lib/widgets/types";
+import type { WidgetData } from "@/lib/widgets/types";
 import {
   styleForRole,
   readBlockTypographyOverride,
@@ -32,22 +31,7 @@ import {
   readShapeMeta,
   readStickerMeta,
 } from "@/lib/visual-elements";
-import { TwitchLiveWidget } from "./widgets/twitch-live-widget";
-import { TwitchVodWidget } from "./widgets/twitch-vod-widget";
-import { YouTubeChannelWidget } from "./widgets/youtube-channel-widget";
-import { YouTubeVideoWidget } from "./widgets/youtube-video-widget";
-import { YouTubeLiveWidget } from "./widgets/youtube-live-widget";
-import { OgCardWidget } from "./widgets/og-card-widget";
-import { GitHubRepoWidget } from "./widgets/github-repo-widget";
-import { GitHubUserWidget } from "./widgets/github-user-widget";
-import { DiscordInviteWidget } from "./widgets/discord-invite-widget";
-import { TipJarWidget } from "./widgets/tip-jar-widget";
-import { SpotifyEmbedWidget } from "./widgets/spotify-embed-widget";
-import { TikTokVideoWidget } from "./widgets/tiktok-video-widget";
-import { StreamScheduleWidget } from "./widgets/stream-schedule-widget";
-import { CrossPromoWidget } from "./widgets/cross-promo-widget";
-import type { TipPlatform, StreamScheduleMeta, CrossPromoMeta } from "@/lib/widgets/types";
-import type { SpotifyEntityType } from "@/lib/widgets/spotify";
+import { WidgetRenderer } from "./widget-renderer";
 import type { ProfileRenderData } from "./profile-render";
 
 export interface ProfileCanvasRenderProps {
@@ -315,11 +299,14 @@ function ElementContent({
   }
   if (element.type === "widget") {
     return (
-      <WidgetElement
-        element={element}
+      <WidgetRenderer
+        id={element.id}
+        kind={element.widget_kind}
+        meta={element.meta as Record<string, unknown> | null}
+        title={element.title}
         theme={theme}
-        widgetData={widgetData}
         preview={preview}
+        widgetData={widgetData}
         username={username}
       />
     );
@@ -434,164 +421,3 @@ function ImageElement({ element }: { element: Element }) {
   );
 }
 
-function WidgetElement({
-  element,
-  theme,
-  widgetData,
-  preview,
-  username,
-}: {
-  element: Element;
-  theme: Theme;
-  widgetData: Record<string, WidgetData | undefined>;
-  preview: boolean;
-  username: string;
-}) {
-  const wd = widgetData[element.id];
-  const size: WidgetSize = isWidgetSize((element.meta as { size?: unknown } | null)?.size)
-    ? ((element.meta as { size: WidgetSize }).size)
-    : "default";
-  const kind = element.widget_kind;
-  const meta = (element.meta ?? {}) as Record<string, unknown>;
-
-  if (kind === "twitch_live") {
-    const channel = (meta.channel as string | undefined) ?? element.title ?? "";
-    const data = wd?.kind === "twitch_live" ? wd.data : null;
-    return <TwitchLiveWidget channel={channel} data={data} theme={theme} size={size} preview={preview} />;
-  }
-  if (kind === "twitch_vod") {
-    const channel = (meta.channel as string | undefined) ?? element.title ?? "";
-    const data = wd?.kind === "twitch_vod" ? wd.data : null;
-    return <TwitchVodWidget channel={channel} data={data} theme={theme} size={size} preview={preview} />;
-  }
-  if (kind === "youtube_live") {
-    const data = wd?.kind === "youtube_live" ? wd.data : null;
-    return (
-      <YouTubeLiveWidget
-        data={data}
-        fallbackUrl={youtubeFallback(meta)}
-        theme={theme}
-        size={size}
-        preview={preview}
-      />
-    );
-  }
-  if (kind === "youtube_channel") {
-    const data = wd?.kind === "youtube_channel" ? wd.data : null;
-    return (
-      <YouTubeChannelWidget
-        data={data}
-        fallbackUrl={youtubeFallback(meta)}
-        theme={theme}
-        size={size}
-        preview={preview}
-      />
-    );
-  }
-  if (kind === "youtube_video") {
-    const data = wd?.kind === "youtube_video" ? wd.data : null;
-    const fallbackUrl = (meta.video_id as string | undefined)
-      ? `https://youtube.com/watch?v=${meta.video_id as string}`
-      : youtubeFallback(meta);
-    return (
-      <YouTubeVideoWidget
-        data={data}
-        fallbackUrl={fallbackUrl}
-        theme={theme}
-        size={size}
-        preview={preview}
-      />
-    );
-  }
-  if (kind === "og_card") {
-    const data = wd?.kind === "og_card" ? wd.data : null;
-    return (
-      <OgCardWidget
-        data={data}
-        fallbackUrl={(meta.url as string | undefined) ?? "#"}
-        theme={theme}
-        size={size}
-        preview={preview}
-      />
-    );
-  }
-  if (kind === "github_repo") {
-    const owner = meta.owner as string | undefined;
-    const repo = meta.repo as string | undefined;
-    const data = wd?.kind === "github_repo" ? wd.data : null;
-    return (
-      <GitHubRepoWidget
-        data={data}
-        fallbackUrl={owner && repo ? `https://github.com/${owner}/${repo}` : "https://github.com"}
-        theme={theme}
-        size={size}
-        preview={preview}
-      />
-    );
-  }
-  if (kind === "github_user") {
-    const username = meta.username as string | undefined;
-    const data = wd?.kind === "github_user" ? wd.data : null;
-    return (
-      <GitHubUserWidget
-        data={data}
-        fallbackUrl={username ? `https://github.com/${username}` : "https://github.com"}
-        theme={theme}
-        size={size}
-        preview={preview}
-      />
-    );
-  }
-  if (kind === "discord_invite") {
-    const data = wd?.kind === "discord_invite" ? wd.data : null;
-    return (
-      <DiscordInviteWidget
-        inviteCode={(meta.invite_code as string | undefined) ?? ""}
-        data={data}
-        theme={theme}
-        size={size}
-        preview={preview}
-      />
-    );
-  }
-  if (kind === "tip_jar") {
-    const platform = meta.platform as TipPlatform | undefined;
-    const handle = meta.handle as string | undefined;
-    if (!platform || !handle) return null;
-    return <TipJarWidget platform={platform} handle={handle} theme={theme} size={size} preview={preview} />;
-  }
-  if (kind === "spotify_embed") {
-    const type = meta.type as SpotifyEntityType | undefined;
-    const id = meta.id as string | undefined;
-    if (!type || !id) return null;
-    return <SpotifyEmbedWidget type={type} id={id} theme={theme} size={size} preview={preview} />;
-  }
-  if (kind === "tiktok_video") {
-    const username = meta.username as string | undefined;
-    const video_id = meta.video_id as string | undefined;
-    if (!username || !video_id) return null;
-    return <TikTokVideoWidget username={username} videoId={video_id} theme={theme} size={size} preview={preview} />;
-  }
-  if (kind === "cross_promo") {
-    return <CrossPromoWidget data={meta as unknown as CrossPromoMeta} size={size} preview={preview} />;
-  }
-  if (kind === "stream_schedule") {
-    return (
-      <StreamScheduleWidget
-        data={meta as unknown as StreamScheduleMeta}
-        theme={theme}
-        size={size}
-        icalUrl={preview ? undefined : `/api/ical/${username}`}
-      />
-    );
-  }
-  return null;
-}
-
-function youtubeFallback(meta: Record<string, unknown>): string {
-  const handle = meta.handle as string | undefined;
-  const channel_id = meta.channel_id as string | undefined;
-  if (handle) return `https://youtube.com/@${handle}`;
-  if (channel_id) return `https://youtube.com/channel/${channel_id}`;
-  return "https://youtube.com";
-}

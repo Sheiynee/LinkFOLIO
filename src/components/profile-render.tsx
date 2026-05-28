@@ -5,8 +5,7 @@ import {
   buttonExtraStyle,
 } from "@/lib/themes";
 import type { Block } from "@/lib/blocks";
-import type { WidgetData, WidgetSize } from "@/lib/widgets/types";
-import { isWidgetSize } from "@/lib/widgets/types";
+import type { WidgetData } from "@/lib/widgets/types";
 import {
   styleForRole,
   readBlockTypographyOverride,
@@ -15,22 +14,7 @@ import {
   type UserFontRecord,
 } from "@/lib/typography";
 import { BackgroundLayers } from "./background-layers";
-import { TwitchLiveWidget } from "./widgets/twitch-live-widget";
-import { TwitchVodWidget } from "./widgets/twitch-vod-widget";
-import { YouTubeChannelWidget } from "./widgets/youtube-channel-widget";
-import { YouTubeVideoWidget } from "./widgets/youtube-video-widget";
-import { YouTubeLiveWidget } from "./widgets/youtube-live-widget";
-import { OgCardWidget } from "./widgets/og-card-widget";
-import { GitHubRepoWidget } from "./widgets/github-repo-widget";
-import { GitHubUserWidget } from "./widgets/github-user-widget";
-import { DiscordInviteWidget } from "./widgets/discord-invite-widget";
-import { TipJarWidget } from "./widgets/tip-jar-widget";
-import { SpotifyEmbedWidget } from "./widgets/spotify-embed-widget";
-import { TikTokVideoWidget } from "./widgets/tiktok-video-widget";
-import { StreamScheduleWidget } from "./widgets/stream-schedule-widget";
-import { CrossPromoWidget } from "./widgets/cross-promo-widget";
-import type { TipPlatform, StreamScheduleMeta, CrossPromoMeta } from "@/lib/widgets/types";
-import type { SpotifyEntityType } from "@/lib/widgets/spotify";
+import { WidgetRenderer } from "./widget-renderer";
 
 export interface ProfileRenderData {
   username: string;
@@ -183,226 +167,20 @@ export function ProfileRender({
                     style={{ backgroundColor: theme.muted_color, opacity: 0.3 }}
                   />
                 );
-              case "widget": {
-                const wd = widgetData[block.id];
-                const widgetSize: WidgetSize = isWidgetSize((block.meta as { size?: unknown } | null)?.size)
-                  ? ((block.meta as { size: WidgetSize }).size)
-                  : "default";
-                if (block.widget_kind === "twitch_live") {
-                  const channel = (block.meta as { channel?: string } | null)?.channel ?? block.title ?? "";
-                  const data = wd?.kind === "twitch_live" ? wd.data : null;
-                  return (
-                    <TwitchLiveWidget
-                      key={block.id}
-                      channel={channel}
-                      data={data}
-                      theme={theme}
-                      size={widgetSize}
-                      preview={preview}
-                    />
-                  );
-                }
-                if (block.widget_kind === "twitch_vod") {
-                  const channel = (block.meta as { channel?: string } | null)?.channel ?? block.title ?? "";
-                  const data = wd?.kind === "twitch_vod" ? wd.data : null;
-                  return (
-                    <TwitchVodWidget
-                      key={block.id}
-                      channel={channel}
-                      data={data}
-                      theme={theme}
-                      size={widgetSize}
-                      preview={preview}
-                    />
-                  );
-                }
-                if (block.widget_kind === "youtube_live") {
-                  const meta = (block.meta ?? {}) as { channel_id?: string; handle?: string };
-                  const fallbackUrl = meta.handle
-                    ? `https://youtube.com/@${meta.handle}`
-                    : meta.channel_id
-                      ? `https://youtube.com/channel/${meta.channel_id}`
-                      : "https://youtube.com";
-                  const data = wd?.kind === "youtube_live" ? wd.data : null;
-                  return (
-                    <YouTubeLiveWidget
-                      key={block.id}
-                      data={data}
-                      fallbackUrl={fallbackUrl}
-                      theme={theme}
-                      size={widgetSize}
-                      preview={preview}
-                    />
-                  );
-                }
-                if (block.widget_kind === "og_card") {
-                  const meta = (block.meta ?? {}) as { url?: string };
-                  const fallbackUrl = meta.url ?? "#";
-                  const data = wd?.kind === "og_card" ? wd.data : null;
-                  return (
-                    <OgCardWidget
-                      key={block.id}
-                      data={data}
-                      fallbackUrl={fallbackUrl}
-                      theme={theme}
-                      size={widgetSize}
-                      preview={preview}
-                    />
-                  );
-                }
-                if (block.widget_kind === "youtube_channel") {
-                  const meta = (block.meta ?? {}) as { channel_id?: string; handle?: string };
-                  const fallbackUrl = meta.handle
-                    ? `https://youtube.com/@${meta.handle}`
-                    : meta.channel_id
-                      ? `https://youtube.com/channel/${meta.channel_id}`
-                      : "https://youtube.com";
-                  const data = wd?.kind === "youtube_channel" ? wd.data : null;
-                  return (
-                    <YouTubeChannelWidget
-                      key={block.id}
-                      data={data}
-                      fallbackUrl={fallbackUrl}
-                      theme={theme}
-                      size={widgetSize}
-                      preview={preview}
-                    />
-                  );
-                }
-                if (block.widget_kind === "youtube_video") {
-                  const meta = (block.meta ?? {}) as { video_id?: string; channel_id?: string; handle?: string };
-                  const fallbackUrl = meta.video_id
-                    ? `https://youtube.com/watch?v=${meta.video_id}`
-                    : meta.handle
-                      ? `https://youtube.com/@${meta.handle}`
-                      : "https://youtube.com";
-                  const data = wd?.kind === "youtube_video" ? wd.data : null;
-                  return (
-                    <YouTubeVideoWidget
-                      key={block.id}
-                      data={data}
-                      fallbackUrl={fallbackUrl}
-                      theme={theme}
-                      size={widgetSize}
-                      preview={preview}
-                    />
-                  );
-                }
-                if (block.widget_kind === "github_repo") {
-                  const meta = (block.meta ?? {}) as { owner?: string; repo?: string };
-                  const fallbackUrl = meta.owner && meta.repo
-                    ? `https://github.com/${meta.owner}/${meta.repo}`
-                    : "https://github.com";
-                  const data = wd?.kind === "github_repo" ? wd.data : null;
-                  return (
-                    <GitHubRepoWidget
-                      key={block.id}
-                      data={data}
-                      fallbackUrl={fallbackUrl}
-                      theme={theme}
-                      size={widgetSize}
-                      preview={preview}
-                    />
-                  );
-                }
-                if (block.widget_kind === "github_user") {
-                  const meta = (block.meta ?? {}) as { username?: string };
-                  const fallbackUrl = meta.username
-                    ? `https://github.com/${meta.username}`
-                    : "https://github.com";
-                  const data = wd?.kind === "github_user" ? wd.data : null;
-                  return (
-                    <GitHubUserWidget
-                      key={block.id}
-                      data={data}
-                      fallbackUrl={fallbackUrl}
-                      theme={theme}
-                      size={widgetSize}
-                      preview={preview}
-                    />
-                  );
-                }
-                if (block.widget_kind === "discord_invite") {
-                  const meta = (block.meta ?? {}) as { invite_code?: string };
-                  const data = wd?.kind === "discord_invite" ? wd.data : null;
-                  return (
-                    <DiscordInviteWidget
-                      key={block.id}
-                      inviteCode={meta.invite_code ?? ""}
-                      data={data}
-                      theme={theme}
-                      size={widgetSize}
-                      preview={preview}
-                    />
-                  );
-                }
-                if (block.widget_kind === "tip_jar") {
-                  const meta = (block.meta ?? {}) as { platform?: TipPlatform; handle?: string };
-                  if (!meta.platform || !meta.handle) return null;
-                  return (
-                    <TipJarWidget
-                      key={block.id}
-                      platform={meta.platform}
-                      handle={meta.handle}
-                      theme={theme}
-                      size={widgetSize}
-                      preview={preview}
-                    />
-                  );
-                }
-                if (block.widget_kind === "spotify_embed") {
-                  const meta = (block.meta ?? {}) as { type?: SpotifyEntityType; id?: string };
-                  if (!meta.type || !meta.id) return null;
-                  return (
-                    <SpotifyEmbedWidget
-                      key={block.id}
-                      type={meta.type}
-                      id={meta.id}
-                      theme={theme}
-                      size={widgetSize}
-                      preview={preview}
-                    />
-                  );
-                }
-                if (block.widget_kind === "tiktok_video") {
-                  const meta = (block.meta ?? {}) as { username?: string; video_id?: string };
-                  if (!meta.username || !meta.video_id) return null;
-                  return (
-                    <TikTokVideoWidget
-                      key={block.id}
-                      username={meta.username}
-                      videoId={meta.video_id}
-                      theme={theme}
-                      size={widgetSize}
-                      preview={preview}
-                    />
-                  );
-                }
-                if (block.widget_kind === "stream_schedule") {
-                  const data = wd?.kind === "stream_schedule" ? wd.data : (block.meta as StreamScheduleMeta | null);
-                  return (
-                    <StreamScheduleWidget
-                      key={block.id}
-                      data={data}
-                      theme={theme}
-                      size={widgetSize}
-                      icalUrl={preview ? undefined : `/api/ical/${profile.username}`}
-                    />
-                  );
-                }
-                if (block.widget_kind === "cross_promo") {
-                  const data = wd?.kind === "cross_promo" ? wd.data : (block.meta as CrossPromoMeta | null);
-                  return (
-                    <CrossPromoWidget
-                      key={block.id}
-                      data={data}
-                      size={widgetSize}
-                      preview={preview}
-                    />
-                  );
-                }
-                return null;
-              }
+              case "widget":
+                return (
+                  <WidgetRenderer
+                    key={block.id}
+                    id={block.id}
+                    kind={block.widget_kind}
+                    meta={block.meta as Record<string, unknown> | null}
+                    title={block.title}
+                    theme={theme}
+                    preview={preview}
+                    widgetData={widgetData}
+                    username={profile.username}
+                  />
+                );
               default:
                 return null;
             }

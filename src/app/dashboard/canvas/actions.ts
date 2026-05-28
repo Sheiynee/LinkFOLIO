@@ -34,22 +34,12 @@ import { rateLimit, RL_UPLOAD } from "@/lib/rate-limit";
 import { validateLinkUrl } from "@/lib/url-validate";
 import { sanitizeMultilineText, sanitizeShortText } from "@/lib/sanitize";
 import { ensureChannelSubscriptions } from "@/lib/twitch-eventsub";
-
-async function getUsernameForUser(userId: string): Promise<string | null> {
-  const supabase = createAdminClient();
-  const { data } = await supabase
-    .from("profiles")
-    .select("username")
-    .eq("id", userId)
-    .single();
-  return data?.username ?? null;
-}
+import { revalidatePublicPage } from "@/lib/revalidate";
 
 async function revalidateUserPages(userId: string) {
-  const username = await getUsernameForUser(userId);
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/canvas");
-  if (username) revalidatePath(`/${username}`);
+  await revalidatePublicPage(userId);
 }
 
 export async function setLayoutMode(mode: LayoutMode) {
