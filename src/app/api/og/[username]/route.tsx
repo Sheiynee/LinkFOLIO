@@ -237,7 +237,7 @@ export async function GET(
                 fontWeight: 600,
               }}
             >
-              <span style={{ color: theme.accent_color }}>◆</span>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", backgroundColor: theme.accent_color }} />
               <span style={{ color: theme.text_color }}>LinkFolio</span>
             </div>
             <div

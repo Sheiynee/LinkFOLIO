@@ -104,7 +104,7 @@ export async function GET(
           {/* Branding footer — "◆" replaced with a plain bullet to avoid Google Font 400 */}
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 32, fontWeight: 600 }}>
-              <span style={{ color: theme.accent_color, fontSize: 20 }}>&#x25CF;</span>
+              <div style={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: theme.accent_color }} />
               <span>LinkFolio</span>
             </div>
             {/* Pre-built string so there's only one child */}
