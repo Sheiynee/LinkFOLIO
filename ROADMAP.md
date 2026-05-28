@@ -291,13 +291,13 @@ E2E runs separately on a schedule or pre-deploy hook (requires a running Vercel 
 ### Setup checklist
 
 ```
-[ ] npm install -D vitest @vitest/coverage-v8 @testing-library/react @testing-library/jest-dom jsdom
-[ ] npm install -D @playwright/test
-[ ] Create vitest.config.ts
-[ ] Create playwright.config.ts
-[ ] Add test scripts to package.json
-[ ] Add .github/workflows/ci.yml
-[ ] Write Priority 1 tests (pure functions)
+[x] npm install -D vitest @vitest/coverage-v8 jsdom
+[x] npm install -D @playwright/test
+[x] Create vitest.config.ts
+[x] Create playwright.config.ts
+[x] Add test scripts to package.json
+[x] Add .github/workflows/ci.yml
+[x] Write Priority 1 tests (pure functions) — 159 tests, all passing
 [ ] Write Priority 2 tests (server actions with mocked Supabase)
 [ ] Write Priority 3 tests (API routes)
 [ ] Write Priority 4 E2E tests (critical happy paths)

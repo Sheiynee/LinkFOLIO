@@ -79,13 +79,21 @@ export interface ParsedGitHub {
 }
 
 export function parseGitHubUrl(input: string): ParsedGitHub | null {
-  const m = input.trim().match(/(?:github\.com\/)?([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,38}[a-zA-Z0-9])?)(?:\/([a-zA-Z0-9._-]{1,100}))?\/?$/i);
-  if (!m) return null;
+  const trimmed = input.trim();
+  if (!/github\.com/i.test(trimmed)) {
+    // Without a github.com host, only accept bare "owner/repo" shorthand.
+    const bare = trimmed.match(
+      /^([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,38}[a-zA-Z0-9])?)\/([a-zA-Z0-9._-]{1,100})$/
+    );
+    if (bare) return { kind: "github_repo", owner: bare[1], repo: bare[2] };
+    return null;
+  }
+  const m = trimmed.match(
+    /github\.com\/([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,38}[a-zA-Z0-9])?)(?:\/([a-zA-Z0-9._-]{1,100}))?/i
+  );
+  if (!m || !m[1]) return null;
   const owner = m[1];
   const repo = m[2];
-  if (!owner) return null;
   if (repo) return { kind: "github_repo", owner, repo };
-  // Bare GitHub URL only — must have github.com prefix to qualify
-  if (!/github\.com/i.test(input)) return null;
   return { kind: "github_user", username: owner };
 }
