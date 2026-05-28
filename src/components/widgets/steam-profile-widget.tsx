@@ -2,8 +2,6 @@ import type { SteamProfileData, WidgetSize } from "@/lib/widgets/types";
 import type { Theme } from "@/lib/themes";
 import { CompactRow } from "./compact-row";
 
-const STEAM_BLUE = "#66c0f4";
-
 function formatMinutes(mins: number): string {
   if (mins < 60) return `${mins}m`;
   const h = Math.floor(mins / 60);

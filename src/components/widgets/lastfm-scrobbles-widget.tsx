@@ -4,14 +4,6 @@ import { CompactRow } from "./compact-row";
 
 const LASTFM_RED = "#d51007";
 
-function StarRating({ rating }: { rating: number }) {
-  return (
-    <span style={{ color: LASTFM_RED, fontSize: "0.7rem", letterSpacing: "0.05em" }}>
-      {"★".repeat(Math.round(rating))}{"☆".repeat(5 - Math.round(rating))}
-    </span>
-  );
-}
-
 export function LastFmScrobblesWidget({
   username,
   data,
