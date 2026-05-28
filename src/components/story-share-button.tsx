@@ -29,10 +29,12 @@ export function StoryShareButton({ username }: { username: string }) {
   }
 
   function handleInstagram() {
-    // Deep link to Instagram app — works on mobile; falls back silently on desktop.
-    window.location.href = "instagram://";
-    // Give the app a moment to open, then do nothing (no fallback needed — user has the image to share manually).
-    setTimeout(() => {}, 1500);
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      window.location.href = "instagram://";
+    } else {
+      window.open("https://www.instagram.com", "_blank", "noopener,noreferrer");
+    }
   }
 
   if (!open) {
