@@ -1,6 +1,8 @@
 import { auth, signOut } from "@/auth";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getProfileById } from "@/lib/db/profiles";
+import { getBlocksByUserId } from "@/lib/db/blocks";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -9,7 +11,6 @@ import { ExternalLink, Settings, Plus, Palette, Eye, MousePointerClick, Sparkles
 import { enableCanvasFromBlocks, setLayoutMode } from "./canvas/actions";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
-import type { Block } from "@/lib/blocks";
 import { BLOCK_LABELS } from "@/lib/blocks";
 import { OnboardingChecklist } from "./onboarding-checklist";
 import { ShareButton } from "@/components/share-button";
@@ -19,13 +20,7 @@ export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/auth/signin");
 
-  const supabase = createAdminClient();
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, username, display_name, bio, avatar_url, theme, layout_mode")
-    .eq("id", session.user.id)
-    .single();
-
+  const profile = await getProfileById(session.user.id);
   if (!profile) redirect("/auth/signin");
 
   const siteBase =
@@ -35,12 +30,9 @@ export default async function DashboardPage() {
       : "http://localhost:3000");
   const absolutePublicUrl = `${siteBase.replace(/\/$/, "")}/${profile.username}`;
 
-  const [{ data: blocks }, viewsRes, clicksRes] = await Promise.all([
-    supabase
-      .from("blocks")
-      .select("id, type, title, url, content, visible")
-      .eq("user_id", session.user.id)
-      .order("position", { ascending: true }),
+  const supabase = createAdminClient();
+  const [blockList, viewsRes, clicksRes] = await Promise.all([
+    getBlocksByUserId(session.user.id),
     supabase
       .from("page_views")
       .select("id", { count: "exact", head: true })
@@ -50,8 +42,6 @@ export default async function DashboardPage() {
       .select("block_id, blocks!inner(user_id)", { count: "exact", head: true })
       .eq("blocks.user_id", session.user.id),
   ]);
-
-  const blockList = (blocks ?? []) as Block[];
   const blockCount = blockList.length;
   const linkCount = blockList.filter((b) => b.type === "link").length;
   const visibleCount = blockList.filter((b) => b.visible !== false).length;

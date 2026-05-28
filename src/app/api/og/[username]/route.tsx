@@ -2,6 +2,7 @@ import { ImageResponse } from "next/og";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeTheme } from "@/lib/themes";
 import { ogBackground } from "@/lib/og-helpers";
+import { getProfileByUsername } from "@/lib/db/profiles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,14 +45,7 @@ export async function GET(
 ) {
   try {
     const host = getSiteHost(req);
-    const supabase = createAdminClient();
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("id, username, display_name, bio, avatar_url, theme, verified")
-      .eq("username", params.username.toLowerCase())
-      .maybeSingle();
-
-    if (error) console.error("[og] profile lookup error:", error.message);
+    const profile = await getProfileByUsername(params.username);
     if (!profile) return fallbackCard("LinkFolio");
 
     const theme = normalizeTheme(profile.theme);
@@ -60,10 +54,11 @@ export async function GET(
     const bio = profile.bio ? truncate(profile.bio, 110) : null;
 
     // Check if any Twitch live widget for this profile is currently live.
+    const supabase = createAdminClient();
     const { data: twitchBlocks } = await supabase
       .from("blocks")
       .select("meta")
-      .eq("user_id", profile.id ?? "")
+      .eq("user_id", profile.id)
       .eq("widget_kind", "twitch_live");
 
     let isLive = false;

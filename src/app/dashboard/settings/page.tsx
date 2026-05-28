@@ -9,21 +9,16 @@ import { ProfileForm } from "./profile-form";
 import { AccountPanel } from "./account-panel";
 import { ConnectedAccountsPanel } from "./connected-accounts-panel";
 import { getUserStorageUsage } from "@/lib/storage-quota";
+import { getProfileById } from "@/lib/db/profiles";
 
 export default async function SettingsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/auth/signin");
 
-  const supabase = createAdminClient();
-
-  const [{ data: profile }, usage, { data: linkedProviderData }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("username, display_name, bio, avatar_url, deleted_at, deleted_grace_until, verified")
-      .eq("id", session.user.id)
-      .single(),
+  const [profile, usage, { data: linkedProviderData }] = await Promise.all([
+    getProfileById(session.user.id),
     getUserStorageUsage(session.user.id),
-    supabase.rpc("get_user_linked_providers", { p_user_id: session.user.id }),
+    createAdminClient().rpc("get_user_linked_providers", { p_user_id: session.user.id }),
   ]);
 
   if (!profile) redirect("/dashboard");

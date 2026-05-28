@@ -7,9 +7,11 @@ import { RevalidateOnFocus } from "@/components/revalidate-on-focus";
 import { normalizeTheme } from "@/lib/themes";
 import { collectUserFontIds } from "@/lib/typography";
 import { getUserFontsByIds } from "@/lib/user-fonts";
-import type { Block } from "@/lib/blocks";
-import type { Element, LayoutMode } from "@/lib/elements";
+import type { LayoutMode } from "@/lib/elements";
 import { loadWidgetData } from "@/lib/widgets/load";
+import { getProfileByUsername } from "@/lib/db/profiles";
+import { getBlocksByUserId } from "@/lib/db/blocks";
+import { getElementsByUserId } from "@/lib/db/elements";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -20,70 +22,20 @@ interface Props {
   params: { username: string };
 }
 
-interface LoadedProfile {
-  id: string;
-  username: string;
-  display_name: string | null;
-  bio: string | null;
-  avatar_url: string | null;
-  theme: unknown;
-  layout_mode: LayoutMode;
-  verified: boolean | null;
-  blocks: Block[];
-  elements: Element[];
-}
-
-async function getProfile(username: string): Promise<LoadedProfile | null> {
-  const supabase = createAdminClient();
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, username, display_name, bio, avatar_url, theme, layout_mode, deleted_at, verified")
-    .eq("username", username.toLowerCase())
-    .maybeSingle();
-
-  // Soft-deleted profiles (in the 30-day grace window) read as 404 to the
-  // public until the account is restored or fully removed.
-  if (!profile || profile.deleted_at) return null;
-
-  const layout_mode = (profile.layout_mode as LayoutMode) ?? "stack";
-
-  if (layout_mode === "canvas") {
-    const { data: elements } = await supabase
-      .from("elements")
-      .select("id, type, title, url, content, visible, widget_kind, meta, x, y, w, h, rotation, z, locked")
-      .eq("user_id", profile.id)
-      .eq("visible", true)
-      .order("z", { ascending: true });
-    return { ...profile, layout_mode, blocks: [], elements: (elements ?? []) as Element[] };
-  }
-
-  const { data: blocks } = await supabase
-    .from("blocks")
-    .select("id, type, title, url, content, visible, widget_kind, meta")
-    .eq("user_id", profile.id)
-    .eq("visible", true)
-    .order("position", { ascending: true });
-  return { ...profile, layout_mode, blocks: (blocks ?? []) as Block[], elements: [] };
-}
-
 async function trackPageView(profileId: string) {
   const headerList = headers();
   const ua = headerList.get("user-agent") ?? "";
   if (BOT_REGEX.test(ua)) return;
 
-  const supabase = createAdminClient();
-  void supabase
+  void createAdminClient()
     .from("page_views")
-    .insert({
-      profile_id: profileId,
-      referrer: headerList.get("referer"),
-    })
+    .insert({ profile_id: profileId, referrer: headerList.get("referer") })
     .then(() => {});
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const profile = await getProfile(params.username);
-  if (!profile) return { title: "Not found — LinkFolio" };
+  const profile = await getProfileByUsername(params.username);
+  if (!profile || profile.deleted_at) return { title: "Not found — LinkFolio" };
   const name = profile.display_name ?? profile.username;
   const ogImage = `/api/og/${profile.username}`;
   return {
@@ -105,13 +57,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function PublicProfilePage({ params }: Props) {
-  const profile = await getProfile(params.username);
-  if (!profile) notFound();
+  const profile = await getProfileByUsername(params.username);
+  // Soft-deleted profiles read as 404 until the grace period ends.
+  if (!profile || profile.deleted_at) notFound();
 
   await trackPageView(profile.id);
 
+  const layoutMode = (profile.layout_mode as LayoutMode) ?? "stack";
+  const [blocks, elements] = await Promise.all([
+    layoutMode !== "canvas" ? getBlocksByUserId(profile.id, true) : Promise.resolve([]),
+    layoutMode === "canvas" ? getElementsByUserId(profile.id, true) : Promise.resolve([]),
+  ]);
+
   const theme = normalizeTheme(profile.theme);
-  const carriers = profile.layout_mode === "canvas" ? profile.elements : profile.blocks;
+  const carriers = layoutMode === "canvas" ? elements : blocks;
   const fontIds = collectUserFontIds(theme.typography, carriers);
   const [widgetData, userFonts] = await Promise.all([
     loadWidgetData(carriers),
@@ -123,7 +82,7 @@ export default async function PublicProfilePage({ params }: Props) {
     display_name: profile.display_name,
     bio: profile.bio,
     avatar_url: profile.avatar_url,
-    blocks: profile.blocks,
+    blocks,
     verified: profile.verified ?? false,
   };
 
@@ -133,12 +92,12 @@ export default async function PublicProfilePage({ params }: Props) {
 
   return (
     <main className="min-h-screen">
-      {profile.layout_mode === "canvas" ? (
+      {layoutMode === "canvas" ? (
         <>
           <div className="hidden sm:block">
             <ProfileCanvasRender
               profile={renderData}
-              elements={profile.elements}
+              elements={elements}
               theme={theme}
               widgetData={widgetData}
               userFonts={userFonts}
@@ -148,7 +107,7 @@ export default async function PublicProfilePage({ params }: Props) {
           <div className="block sm:hidden">
             <ProfileCanvasRender
               profile={renderData}
-              elements={profile.elements}
+              elements={elements}
               theme={theme}
               widgetData={widgetData}
               userFonts={userFonts}

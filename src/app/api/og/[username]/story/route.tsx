@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeTheme } from "@/lib/themes";
 import { ogBackground } from "@/lib/og-helpers";
+import { getProfileByUsername } from "@/lib/db/profiles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,12 +18,7 @@ export async function GET(
   { params }: { params: { username: string } }
 ) {
   try {
-    const supabase = createAdminClient();
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("username, display_name, bio, avatar_url, theme")
-      .eq("username", params.username.toLowerCase())
-      .maybeSingle();
+    const profile = await getProfileByUsername(params.username);
 
     if (!profile) {
       return new ImageResponse(

@@ -1,5 +1,4 @@
 import { auth } from "@/auth";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
@@ -10,7 +9,9 @@ import { normalizeTheme } from "@/lib/themes";
 import { collectUserFontIds } from "@/lib/typography";
 import { getUserFontsByIds } from "@/lib/user-fonts";
 import { loadWidgetData } from "@/lib/widgets/load";
-import type { Element, LayoutMode } from "@/lib/elements";
+import type { LayoutMode } from "@/lib/elements";
+import { getProfileById } from "@/lib/db/profiles";
+import { getElementsByUserId } from "@/lib/db/elements";
 
 export const dynamic = "force-dynamic";
 
@@ -18,12 +19,7 @@ export default async function CanvasEditorPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/auth/signin");
 
-  const supabase = createAdminClient();
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("username, display_name, bio, avatar_url, theme, layout_mode")
-    .eq("id", session.user.id)
-    .single();
+  const profile = await getProfileById(session.user.id);
   if (!profile) redirect("/dashboard");
 
   const layoutMode = (profile.layout_mode as LayoutMode) ?? "stack";
@@ -46,12 +42,7 @@ export default async function CanvasEditorPage() {
     );
   }
 
-  const { data: elements } = await supabase
-    .from("elements")
-    .select("id, type, title, url, content, visible, widget_kind, meta, x, y, w, h, rotation, z, locked")
-    .eq("user_id", session.user.id)
-    .order("z", { ascending: true });
-  const list = (elements ?? []) as Element[];
+  const list = await getElementsByUserId(session.user.id);
 
   const theme = normalizeTheme(profile.theme);
   const fontIds = collectUserFontIds(theme.typography, list);
