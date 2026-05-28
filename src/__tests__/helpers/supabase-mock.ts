@@ -20,6 +20,7 @@ export function chain(
     update: vi.fn().mockReturnThis(),
     delete: vi.fn().mockReturnThis(),
     upsert: vi.fn().mockReturnThis(),
+    is: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue(value),
     maybeSingle: vi.fn().mockResolvedValue(value),
     // Makes `await chainObject` work without calling single/maybeSingle.
