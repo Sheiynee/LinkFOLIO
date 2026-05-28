@@ -98,9 +98,14 @@ Target users, in order: Twitch streamers → YouTubers / video creators → musi
   - **Generic OG card** — `<meta property="og:*">` scrape for any URL, with SSRF protection
   - **Stream schedule** — weekly recurring schedule with timezone; "Add to calendar" button; `/api/ical/{username}` generates a subscribable ICS feed with `RRULE:FREQ=WEEKLY`
   - **Cross-promotion** — branded gradient CTA cards; detects platform from pasted URL (Twitch, YouTube, TikTok, Instagram, Twitter/X, Spotify artist)
+- **18 widget kinds live** (3 tier-2 added 2026-05-28):
+  - **Last.fm scrobbles** — most recent scrobble + "Now Playing" badge; album art, artist, track; 1-min refresh (`LASTFM_API_KEY`)
+  - **Steam profile** — avatar, online status, currently/recently played game; accepts vanity URL or Steam64 ID; 5-min refresh (`STEAM_API_KEY`)
+  - **Letterboxd films** — most recently logged film with poster, title, year, star rating; featured size shows 3-film poster grid; RSS scrape, 30-min refresh
 
 ### URL auto-detect on paste
 - Detects all major platforms + cross-promo URLs + any valid http(s) URL as a generic OG card fallback
+- Auto-detects Last.fm, Steam, and Letterboxd profile URLs
 
 ### Onboarding archetype flow (Phase 2 shipped)
 - 4-step flow: Archetype picker → Platform URL paste → Brand color seed → Typography pairing
@@ -184,18 +189,14 @@ Target users, in order: Twitch streamers → YouTubers / video creators → musi
 ### Account security
 - **2FA / passkeys (WebAuthn)** — `@simplewebauthn/server` + `@simplewebauthn/browser`, credentials table, registration + authentication ceremonies.
 
-### Tier 2/3 widgets (post-launch, per-user OAuth)
-All need per-user OAuth + token refresh infrastructure:
+### Tier 2/3 widgets (remaining — per-user OAuth required)
 
-| Widget | Auth needed | Env vars |
-|---|---|---|
-| Spotify now-playing | Per-user OAuth (scopes: `user-read-playback-state`) | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` |
-| Steam profile | API key only | `STEAM_API_KEY` |
-| Last.fm scrobbles | API key only | `LASTFM_API_KEY` |
-| Strava activities | Per-user OAuth | `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET` |
-| Letterboxd | Public scrape | — |
-| Twitter/X | Deferred — API unstable | — |
-| Kick | Deferred — API not mature | — |
+| Widget | Auth needed | Env vars | Status |
+|---|---|---|---|
+| Spotify now-playing | Per-user OAuth (`user-read-playback-state`) | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | Deferred — needs token refresh infra |
+| Strava activities | Per-user OAuth | `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET` | Deferred — needs token refresh infra |
+| Twitter/X | — | — | Deferred — API unstable |
+| Kick | — | — | Deferred — API not mature |
 
 ---
 
@@ -328,22 +329,22 @@ Moved to `src/lib/og-helpers.ts`, imported by both OG route files.
 **5. Centralize `revalidatePublicPage`** ✅
 Extracted to `src/lib/revalidate.ts`. Both action files import from there; canvas `revalidateUserPages` now calls it directly and `getUsernameForUser` is removed.
 
-**6. Replace `as unknown as X` casts in `load.ts`**
-The `stream_schedule` and `cross_promo` dispatch in `load.ts` uses `meta as unknown as StreamScheduleMeta` because `meta` is typed as `Record<string, unknown>`. Add a lightweight runtime validator (e.g. a `parseStreamScheduleMeta(meta)` function that checks required fields) so these casts are type-safe and catch corrupt DB rows early.
+**6. Replace `as unknown as X` casts in `load.ts`** ✅
+Added `readStreamScheduleMeta()` and `readCrossPromoMeta()` runtime validators. Both validate field presence and types before constructing the typed value — no more double-casts.
 
-**7. Consolidate `createAdminClient()` call sites**
-`createAdminClient()` is called at the top of nearly every server action. Consider a thin service layer (`src/lib/db/profiles.ts`, `src/lib/db/blocks.ts`, etc.) that wraps Supabase queries with typed return shapes. Not essential now but will reduce `as` casts throughout the codebase.
+**7. Consolidate `createAdminClient()` call sites** ✅
+Created `src/lib/db/profiles.ts`, `src/lib/db/blocks.ts`, and `src/lib/db/elements.ts` with typed query helpers (`getProfileByUsername`, `getProfileById`, `getBlocksByUserId`, `getElementsByUserId`). Updated 8 call sites: public page, dashboard, content/canvas/theme/settings pages, both OG routes. Also removed the 58-line `loadPreviewWidgetData` duplicate from `theme/page.tsx` (was missing `stream_schedule`/`cross_promo` support — silent bug fixed).
 
 ### Low priority
 
-**8. Replace `CODEBASE_EXPLORATION_REPORT.md`**
-A `CODEBASE_EXPLORATION_REPORT.md` was accidentally committed to the repo root by a planning agent. Delete it — the information belongs in code comments or this roadmap, not as a loose markdown file.
+**8. Delete `CODEBASE_EXPLORATION_REPORT.md`** ✅
+Removed from repo root.
 
-**9. Branded sign-in page**
-`src/app/auth/signin/page.tsx` uses the default NextAuth sign-in UI. Replace with a branded page once the design system is stable.
+**9. Branded sign-in page** ✅
+`src/app/auth/signin/page.tsx` already uses a fully branded custom page (LinkFolio name, GitHub + Google buttons, card layout). No action needed.
 
-**10. Historical migration references to dropped `links` table**
-`02_app_schema.sql` and `05_blocks.sql` reference the old `links` table. Add `drop table if exists public.links;` to a future migration rather than editing applied ones.
+**10. Historical migration references to dropped `links` table** ✅
+Added `supabase/20_drop_deprecated_links.sql` — idempotent `DROP TABLE IF EXISTS public.links`.
 
 ---
 
@@ -431,13 +432,15 @@ Stack: Stripe Checkout + Customer Portal, webhooks → `subscriptions` table, `e
 | 17 | `17_account_management.sql` | `email_change_tokens`, `profiles.email_digest_opted_in`, cross-schema RPC helpers (`get_user_linked_providers`, `email_exists`, `update_user_email`, `get_user_email`) |
 | 18 | `18_eventsub.sql` | `creator_live_status` + `twitch_eventsub_subscriptions` for Twitch EventSub webhook infrastructure |
 | 19 | `19_new_widget_kinds.sql` | Widens `blocks_widget_kind_check` + `elements_widget_kind_check` with `'stream_schedule'`, `'cross_promo'`; adds `profiles.verified` |
+| 20 | `20_drop_deprecated_links.sql` | Drops the deprecated `public.links` table (superseded by `blocks` in migration 05) |
+| 21 | `21_new_widget_kinds_2.sql` | Widens both widget_kind constraints with `'lastfm_scrobbles'`, `'steam_profile'`, `'letterboxd_films'` |
 
 ### Planned migrations
 
 | # | Purpose | Phase |
 |---|---|---|
-| 20 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 (deferred) |
-| 21 | `domains`: custom domain verification | 7 |
+| 22 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 (deferred) |
+| 23 | `domains`: custom domain verification | 7 |
 
 Run migrations in order in Supabase SQL Editor. Each is idempotent.
 
@@ -455,4 +458,4 @@ Run migrations in order in Supabase SQL Editor. Each is idempotent.
 
 ---
 
-*Last updated: 2026-05-28*
+*Last updated: 2026-05-28 — tier-2 widgets shipped (Last.fm, Steam, Letterboxd); full refactoring backlog cleared*
