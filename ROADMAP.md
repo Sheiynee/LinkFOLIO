@@ -300,7 +300,7 @@ E2E runs separately on a schedule or pre-deploy hook (requires a running Vercel 
 [x] Write Priority 1 tests (pure functions) — 161 tests, all passing
 [x] Write Priority 2 tests (server actions with mocked Supabase) — 61 tests, all passing
 [x] Write Priority 3 tests (API routes) — 41 tests, all passing
-[ ] Write Priority 4 E2E tests (critical happy paths)
+[x] Write Priority 4 E2E tests (critical happy paths) — 7 scenarios, auth via session injection
 ```
 
 ---
