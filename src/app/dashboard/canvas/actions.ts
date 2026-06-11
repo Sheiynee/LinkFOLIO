@@ -24,7 +24,6 @@ import {
   defaultRegionMeta,
   defaultShapeMeta,
   defaultStickerMeta,
-  type ImageMask,
   type ShapeKind,
   type StickerIcon,
 } from "@/lib/visual-elements";
@@ -417,31 +416,7 @@ export async function uploadAndCreateImageElement(formData: FormData) {
   });
 }
 
-/** Mutate the image element's mask without re-uploading. */
-export async function updateImageMask(id: string, mask: ImageMask) {
-  const session = await auth();
-  if (!session?.user?.id) return { error: "Not authenticated" };
-  const supabase = createAdminClient();
-
-  const { data: row } = await supabase
-    .from("elements")
-    .select("type, meta")
-    .eq("id", id)
-    .eq("user_id", session.user.id)
-    .single();
-  if (!row || row.type !== "image") return { error: "Not an image element" };
-
-  const meta = { ...(row.meta as Record<string, unknown> | null ?? {}), mask };
-  const { error } = await supabase
-    .from("elements")
-    .update({ meta })
-    .eq("id", id)
-    .eq("user_id", session.user.id);
-  if (error) return { error: error.message };
-
-  await revalidateUserPages(session.user.id);
-  return { ok: true };
-}export async function deleteElement(id: string) {
+export async function deleteElement(id: string) {
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated" };
 

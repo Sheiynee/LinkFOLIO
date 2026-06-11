@@ -153,11 +153,11 @@ Target users, in order: Twitch streamers → YouTubers / video creators → musi
 
 Benchmarked against Carrd (click-to-edit immediacy), Odoo's website builder (grid mode, mobile editing toggle, saveable blocks), and Figma/Canva-class editors (layers, zoom, smart guides, numeric inputs). The gesture core is solid; the gaps are affordances and render performance.
 
-### Step 1 — Refactor before features
-- [ ] Split `canvas-editor.tsx` (~1,750 lines): gestures hook, `SidePanel`, per-type inspectors, clipboard helpers into separate files
-- [ ] Memoize the render path: `React.memo` on `ProfileCanvasRender` + `ElementBox`; dragging one element currently re-renders all N per frame
-- [ ] Cache `placementsForMobile` per render (called twice per element in the `canvasH` memo; O(N log N) each call)
-- [ ] Remove dead `updateImageMask` action
+### Step 1 — Refactor before features ✅ (2026-06-12)
+- [x] Split `canvas-editor.tsx` (was ~1,750 lines → ~460): `use-canvas-gestures.ts` (pointer/drag/resize/rotate/marquee + debounced saves), `side-panel.tsx`, `inspectors.tsx`, `clipboard.ts`
+- [x] Memoize the render path: `React.memo` on `ElementBox` — unchanged elements keep reference identity, so dragging one element no longer re-renders the other N−1 boxes. Verified safe on the server-rendered public page (canvas profile renders fine through the memo)
+- [x] Cache `placementsForMobile` by array identity (WeakMap) — was O(N log N) per call, called many times per pointer-move frame
+- [x] Remove dead `updateImageMask` action
 
 ### Step 2 — Quick affordances (data model already supports them)
 - [ ] Z-order controls: bring to front / forward / backward / send to back (buttons + `]`/`[` shortcuts) — `z` exists with no UI

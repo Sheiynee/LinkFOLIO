@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { ExternalLink } from "lucide-react";
 import {
   type Theme,
@@ -167,7 +168,13 @@ export function ProfileCanvasRender({
   );
 }
 
-function ElementBox({
+/**
+ * Memoized per-element box: in the editor every pointer-move frame calls
+ * setElements, but unchanged elements keep reference identity (state updaters
+ * only spread the moving elements), so memo skips re-rendering the other N-1
+ * boxes. On the server-rendered public page memo is a no-op.
+ */
+const ElementBox = memo(function ElementBox({
   element,
   theme,
   preview,
@@ -207,7 +214,7 @@ function ElementBox({
       />
     </div>
   );
-}
+});
 
 function ElementContent({
   element,

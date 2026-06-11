@@ -13,6 +13,14 @@ export interface MobilePlacement {
 }
 
 /**
+ * Cache keyed by array identity. State updates always produce a new elements
+ * array, so identity is a correct cache key — and the editor calls this many
+ * times per pointer-move frame with the same array (placement lookups, snap
+ * targets, marquee hit-testing, canvas height).
+ */
+const placementsCache = new WeakMap<Element[], Record<string, MobilePlacement>>();
+
+/**
  * For an element on the public mobile view: return its mobile placement.
  * If any of `mobile_x/y/w/h` is set the override wins for that axis. Any
  * absent values are filled in by the auto-reflow result.
@@ -21,6 +29,8 @@ export interface MobilePlacement {
  * full-width, preserving each element's desktop height.
  */
 export function placementsForMobile(elements: Element[]): Record<string, MobilePlacement> {
+  const cached = placementsCache.get(elements);
+  if (cached) return cached;
   const sorted = [...elements].sort((a, b) => a.y - b.y);
   const width = MOBILE_CANVAS_WIDTH - MOBILE_INSET_X * 2;
   let y = MOBILE_INSET_TOP;
@@ -40,5 +50,6 @@ export function placementsForMobile(elements: Element[]): Record<string, MobileP
     };
     y += auto.h + MOBILE_GAP_Y;
   }
+  placementsCache.set(elements, out);
   return out;
 }
