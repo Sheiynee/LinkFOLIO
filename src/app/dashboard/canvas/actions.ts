@@ -215,7 +215,16 @@ export interface ElementPatch {
   meta?: Record<string, unknown> | null;
 }
 
-export async function updateElement(id: string, patch: ElementPatch) {
+export interface SaveOptions {
+  /**
+   * Skip cache revalidation for this write. Used by continuous gestures
+   * (drag/resize/rotate) which save every 250ms — the gesture's pointerup
+   * flush performs a final save WITH revalidation.
+   */
+  skipRevalidate?: boolean;
+}
+
+export async function updateElement(id: string, patch: ElementPatch, opts?: SaveOptions) {
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated" };
 
@@ -243,7 +252,7 @@ export async function updateElement(id: string, patch: ElementPatch) {
     .eq("user_id", session.user.id);
   if (error) return { error: error.message };
 
-  await revalidateUserPages(session.user.id);
+  if (!opts?.skipRevalidate) await revalidateUserPages(session.user.id);
   return { ok: true };
 }
 
@@ -480,20 +489,24 @@ export async function batchUpdateElements(updates: BatchPatch[]) {
   if (!session?.user?.id) return { error: "Not authenticated" };
 
   const supabase = createAdminClient();
-  for (const u of updates) {
-    const clean: ElementPatch = { ...u.patch };
-    if (typeof clean.w === "number") clean.w = Math.max(MIN_ELEMENT_W, Math.round(clean.w));
-    if (typeof clean.h === "number") clean.h = Math.max(MIN_ELEMENT_H, Math.round(clean.h));
-    if (typeof clean.x === "number") clean.x = clamp(Math.round(clean.x), -CANVAS_WIDTH, CANVAS_WIDTH * 2);
-    if (typeof clean.y === "number") clean.y = Math.max(-200, Math.round(clean.y));
-    if (typeof clean.rotation === "number") clean.rotation = clamp(clean.rotation, -360, 360);
-    const { error } = await supabase
-      .from("elements")
-      .update(clean)
-      .eq("id", u.id)
-      .eq("user_id", session.user.id);
-    if (error) return { error: error.message };
-  }
+  const results = await Promise.all(
+    updates.map(async (u) => {
+      const clean: ElementPatch = { ...u.patch };
+      if (typeof clean.w === "number") clean.w = Math.max(MIN_ELEMENT_W, Math.round(clean.w));
+      if (typeof clean.h === "number") clean.h = Math.max(MIN_ELEMENT_H, Math.round(clean.h));
+      if (typeof clean.x === "number") clean.x = clamp(Math.round(clean.x), -CANVAS_WIDTH, CANVAS_WIDTH * 2);
+      if (typeof clean.y === "number") clean.y = Math.max(-200, Math.round(clean.y));
+      if (typeof clean.rotation === "number") clean.rotation = clamp(clean.rotation, -360, 360);
+      const { error } = await supabase
+        .from("elements")
+        .update(clean)
+        .eq("id", u.id)
+        .eq("user_id", session.user.id);
+      return error;
+    })
+  );
+  const firstError = results.find((e) => e != null);
+  if (firstError) return { error: firstError.message };
   await revalidateUserPages(session.user.id);
   return { ok: true };
 }
@@ -547,25 +560,29 @@ export interface MobilePatch {
   mobile_h?: number | null;
 }
 
-export async function updateMobilePlacements(patches: MobilePatch[]) {
+export async function updateMobilePlacements(patches: MobilePatch[], opts?: SaveOptions) {
   if (patches.length === 0) return { ok: true };
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated" };
   const supabase = createAdminClient();
-  for (const p of patches) {
-    const { error } = await supabase
-      .from("elements")
-      .update({
-        mobile_x: p.mobile_x ?? null,
-        mobile_y: p.mobile_y ?? null,
-        mobile_w: p.mobile_w ?? null,
-        mobile_h: p.mobile_h ?? null,
-      })
-      .eq("id", p.id)
-      .eq("user_id", session.user.id);
-    if (error) return { error: error.message };
-  }
-  await revalidateUserPages(session.user.id);
+  const results = await Promise.all(
+    patches.map(async (p) => {
+      const { error } = await supabase
+        .from("elements")
+        .update({
+          mobile_x: p.mobile_x ?? null,
+          mobile_y: p.mobile_y ?? null,
+          mobile_w: p.mobile_w ?? null,
+          mobile_h: p.mobile_h ?? null,
+        })
+        .eq("id", p.id)
+        .eq("user_id", session.user.id);
+      return error;
+    })
+  );
+  const firstError = results.find((e) => e != null);
+  if (firstError) return { error: firstError.message };
+  if (!opts?.skipRevalidate) await revalidateUserPages(session.user.id);
   return { ok: true };
 }
 

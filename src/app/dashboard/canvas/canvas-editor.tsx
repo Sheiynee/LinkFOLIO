@@ -26,8 +26,9 @@ import {
 import type { Theme } from "@/lib/themes";
 import type { WidgetData } from "@/lib/widgets/types";
 import type { UserFontRecord } from "@/lib/typography";
-import { snap, snapToGrid, type SnapGuide } from "@/lib/canvas-snap";
+import { snap, type SnapGuide } from "@/lib/canvas-snap";
 import { MOBILE_CANVAS_WIDTH, placementsForMobile } from "@/lib/canvas-mobile";
+import { computeGroupOp, computeNudge, resizeRotatedBox, type GroupOp } from "@/lib/canvas-ops";
 import {
   bboxOf,
   MarqueeBox,
@@ -76,7 +77,7 @@ import { StickerGlyph } from "@/components/sticker-glyph";
 type View = "desktop" | "mobile";
 
 interface DragGesture { type: "drag"; ids: string[]; startPointer: { x: number; y: number }; startBoxes: Record<string, { x: number; y: number; w: number; h: number }>; moved: boolean }
-interface ResizeGesture { type: "resize"; handle: Exclude<HandleId, "rot">; id: string; startPointer: { x: number; y: number }; startBox: { x: number; y: number; w: number; h: number }; moved: boolean }
+interface ResizeGesture { type: "resize"; handle: Exclude<HandleId, "rot">; id: string; startPointer: { x: number; y: number }; startBox: { x: number; y: number; w: number; h: number }; rotation: number; moved: boolean }
 interface RotateGesture { type: "rotate"; id: string; centerX: number; centerY: number; startAngle: number; startRotation: number; moved: boolean }
 interface MarqueeGesture { type: "marquee"; startPointer: { x: number; y: number }; pointer: { x: number; y: number }; additive: boolean; baseSelection: Set<string> }
 type Gesture = DragGesture | ResizeGesture | RotateGesture | MarqueeGesture;
@@ -194,7 +195,11 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
     );
   }, []);
 
-  /** Debounced server save for continuous gestures. */
+  /**
+   * Debounced server save for continuous gestures. These mid-gesture saves
+   * skip cache revalidation — the pointerup flush performs the final save
+   * with a full revalidate.
+   */
   const queueSave = useCallback((id: string, patch: { x?: number; y?: number; w?: number; h?: number; rotation?: number }) => {
     const timers = saveTimers.current;
     const prev = timers.get(id);
@@ -202,8 +207,8 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
     const t = setTimeout(() => {
       startTransition(async () => {
         const res = viewRef.current === "mobile"
-          ? await updateMobilePlacements([{ id, mobile_x: patch.x, mobile_y: patch.y, mobile_w: patch.w, mobile_h: patch.h }])
-          : await updateElement(id, patch);
+          ? await updateMobilePlacements([{ id, mobile_x: patch.x, mobile_y: patch.y, mobile_w: patch.w, mobile_h: patch.h }], { skipRevalidate: true })
+          : await updateElement(id, patch, { skipRevalidate: true });
         if (res.error) setError(res.error);
       });
       timers.delete(id);
@@ -247,6 +252,8 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
           id: el.id,
           startPointer: { x: px, y: py },
           startBox: box,
+          // Mobile placements always render unrotated.
+          rotation: viewRef.current === "mobile" ? 0 : el.rotation,
           moved: false,
         };
       }
@@ -340,7 +347,8 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
           : Array.from(Object.entries(placementsForMobile(list)))
               .filter(([id]) => !moving.includes(id))
               .map(([id, p]) => ({ ...list.find((e) => e.id === id)!, ...p }));
-        const snapped = snap(proposed, others as Element[], "move");
+        const snapWidth = viewRef.current === "mobile" ? MOBILE_CANVAS_WIDTH : CANVAS_WIDTH;
+        const snapped = snap(proposed, others as Element[], "move", snapWidth);
         const snapDX = snapped.box.x - startPrimary.x;
         const snapDY = snapped.box.y - startPrimary.y;
         setGuides(snapped.guides);
@@ -366,21 +374,27 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
         const dx = pt.x - g.startPointer.x;
         const dy = pt.y - g.startPointer.y;
         g.moved = g.moved || Math.abs(dx) > 1 || Math.abs(dy) > 1;
-        let { x, y, w, h } = g.startBox;
         const handle = g.handle;
-        if (handle === "l" || handle === "tl" || handle === "bl") { x += dx; w -= dx; }
-        if (handle === "r" || handle === "tr" || handle === "br") { w += dx; }
-        if (handle === "t" || handle === "tl" || handle === "tr") { y += dy; h -= dy; }
-        if (handle === "b" || handle === "bl" || handle === "br") { h += dy; }
-        // Clamp before snap.
-        if (w < MIN_ELEMENT_W) { if (handle.includes("l")) x -= MIN_ELEMENT_W - w; w = MIN_ELEMENT_W; }
-        if (h < MIN_ELEMENT_H) { if (handle.includes("t")) y -= MIN_ELEMENT_H - h; h = MIN_ELEMENT_H; }
-        const others = list.filter((e) => e.id !== g.id);
-        const mode: Parameters<typeof snap>[2] = `resize-${handle}` as Parameters<typeof snap>[2];
-        const snapped = snap({ x, y, w, h }, others, mode);
-        setGuides(snapped.guides);
-        patchLocal(g.id, snapped.box);
-        queueSave(g.id, snapped.box);
+        const box = resizeRotatedBox(g.startBox, g.rotation, handle, dx, dy, MIN_ELEMENT_W, MIN_ELEMENT_H);
+        if (g.rotation === 0) {
+          // Axis-aligned: snap against the other elements as the user sees them.
+          const others = viewRef.current === "desktop"
+            ? list.filter((e) => e.id !== g.id)
+            : Array.from(Object.entries(placementsForMobile(list)))
+                .filter(([id]) => id !== g.id)
+                .map(([id, p]) => ({ ...list.find((e) => e.id === id)!, ...p }));
+          const snapWidth = viewRef.current === "mobile" ? MOBILE_CANVAS_WIDTH : CANVAS_WIDTH;
+          const mode: Parameters<typeof snap>[2] = `resize-${handle}` as Parameters<typeof snap>[2];
+          const snapped = snap(box, others as Element[], mode, snapWidth);
+          setGuides(snapped.guides);
+          patchLocal(g.id, snapped.box);
+          queueSave(g.id, snapped.box);
+        } else {
+          // Rotated boxes don't snap to axis-aligned guides.
+          setGuides([]);
+          patchLocal(g.id, box);
+          queueSave(g.id, box);
+        }
       } else if (g.type === "rotate") {
         const angle = Math.atan2(pt.y - g.centerY, pt.x - g.centerX);
         const deltaDeg = ((angle - g.startAngle) * 180) / Math.PI;
@@ -422,15 +436,18 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
         // Commit a history snapshot for this gesture.
         history.push(beforeGestureRef.current);
 
-        // Flush pending debounced saves immediately so a quick browser
-        // refresh after lifting the pointer doesn't lose the final position.
+        // Cancel pending debounced saves and write the final position
+        // immediately (with revalidation — the debounced saves skip it) so a
+        // quick browser refresh after lifting the pointer doesn't lose the
+        // final position and the public page picks up the gesture's result.
         const timers = saveTimers.current;
         const ids = g.type === "drag" ? g.ids : [g.id];
         for (const id of ids) {
           const pending = timers.get(id);
-          if (!pending) continue;
-          clearTimeout(pending);
-          timers.delete(id);
+          if (pending) {
+            clearTimeout(pending);
+            timers.delete(id);
+          }
           const el = elementsRef.current.find((e) => e.id === id);
           if (!el) continue;
           startTransition(async () => {
@@ -530,31 +547,16 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
 
   function nudgeSelection(ids: string[], dx: number, dy: number) {
     history.push(elementsRef.current);
-    setElements((es) =>
-      es.map((e) => {
-        if (!ids.includes(e.id)) return e;
-        if (viewRef.current === "mobile") {
-          const m = placementsForMobile(elementsRef.current)[e.id];
-          return { ...e, mobile_x: (e.mobile_x ?? m.x) + dx, mobile_y: (e.mobile_y ?? m.y) + dy };
-        }
-        return { ...e, x: e.x + dx, y: e.y + dy };
-      })
-    );
+    // Compute the next state and the server patches from the same source
+    // array — reading refs after setElements races the ref-sync effect and
+    // saves stale coordinates.
+    const r = computeNudge(elementsRef.current, ids, dx, dy, viewRef.current);
+    setElements(r.next);
     startTransition(async () => {
-      const patches = ids.map((id) => {
-        const e = elementsRef.current.find((x) => x.id === id)!;
-        return { id, patch: { x: e.x, y: e.y } };
-      });
-      if (viewRef.current === "mobile") {
-        await updateMobilePlacements(
-          ids.map((id) => {
-            const e = elementsRef.current.find((x) => x.id === id)!;
-            return { id, mobile_x: e.mobile_x, mobile_y: e.mobile_y };
-          })
-        );
-      } else {
-        await batchUpdateElements(patches);
-      }
+      const res = viewRef.current === "mobile"
+        ? await updateMobilePlacements(r.mobilePatches)
+        : await batchUpdateElements(r.desktopPatches);
+      if (res.error) setError(res.error);
     });
   }
 
@@ -617,64 +619,22 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
   }
 
   // ─── Group operations ─────────────────────────────────────
-  function applyGroupOp(op: "align-l" | "align-c" | "align-r" | "align-t" | "align-m" | "align-b" | "dist-h" | "dist-v") {
+  function applyGroupOp(op: GroupOp) {
     const ids = Array.from(selectedIdsRef.current);
     if (ids.length < 2) return;
     if ((op === "dist-h" || op === "dist-v") && ids.length < 3) return;
+
+    // Operates on the placements the user is looking at: desktop coords in
+    // desktop view, mobile overrides (or auto-reflow positions) in mobile view.
+    const r = computeGroupOp(elementsRef.current, ids, op, viewRef.current);
+    if (r.desktopPatches.length === 0 && r.mobilePatches.length === 0) return;
     history.push(elementsRef.current);
-
-    const list = elementsRef.current.filter((e) => ids.includes(e.id));
-    const box = bboxOf(list)!;
-    const patches: Array<{ id: string; patch: { x?: number; y?: number } }> = [];
-
-    if (op === "align-l") {
-      for (const e of list) patches.push({ id: e.id, patch: { x: box.x } });
-    } else if (op === "align-c") {
-      const cx = box.x + box.w / 2;
-      for (const e of list) patches.push({ id: e.id, patch: { x: Math.round(cx - e.w / 2) } });
-    } else if (op === "align-r") {
-      const right = box.x + box.w;
-      for (const e of list) patches.push({ id: e.id, patch: { x: right - e.w } });
-    } else if (op === "align-t") {
-      for (const e of list) patches.push({ id: e.id, patch: { y: box.y } });
-    } else if (op === "align-m") {
-      const my = box.y + box.h / 2;
-      for (const e of list) patches.push({ id: e.id, patch: { y: Math.round(my - e.h / 2) } });
-    } else if (op === "align-b") {
-      const bottom = box.y + box.h;
-      for (const e of list) patches.push({ id: e.id, patch: { y: bottom - e.h } });
-    } else if (op === "dist-h") {
-      const sorted = [...list].sort((a, b) => a.x - b.x);
-      const first = sorted[0];
-      const last = sorted[sorted.length - 1];
-      const totalGap = (last.x + last.w) - first.x - sorted.reduce((s, e) => s + e.w, 0);
-      const gap = totalGap / (sorted.length - 1);
-      let cursor = first.x;
-      for (const e of sorted) {
-        patches.push({ id: e.id, patch: { x: Math.round(cursor) } });
-        cursor += e.w + gap;
-      }
-    } else if (op === "dist-v") {
-      const sorted = [...list].sort((a, b) => a.y - b.y);
-      const first = sorted[0];
-      const last = sorted[sorted.length - 1];
-      const totalGap = (last.y + last.h) - first.y - sorted.reduce((s, e) => s + e.h, 0);
-      const gap = totalGap / (sorted.length - 1);
-      let cursor = first.y;
-      for (const e of sorted) {
-        patches.push({ id: e.id, patch: { y: Math.round(cursor) } });
-        cursor += e.h + gap;
-      }
-    }
-
-    setElements((es) =>
-      es.map((e) => {
-        const p = patches.find((q) => q.id === e.id);
-        return p ? { ...e, ...p.patch } : e;
-      })
-    );
+    setElements(r.next);
     startTransition(async () => {
-      await batchUpdateElements(patches);
+      const res = viewRef.current === "mobile"
+        ? await updateMobilePlacements(r.mobilePatches)
+        : await batchUpdateElements(r.desktopPatches);
+      if (res.error) setError(res.error);
     });
   }
 
@@ -834,8 +794,8 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
                       {selectionBox && (
                         <SelectionOverlay
                           box={selectionBox}
-                          rotation={singleSelected?.rotation ?? 0}
-                          showResize={selectedIds.size === 1 && !(singleSelected?.rotation ?? 0)}
+                          rotation={view === "mobile" ? 0 : singleSelected?.rotation ?? 0}
+                          showResize={selectedIds.size === 1}
                           showRotate={selectedIds.size === 1 && view === "desktop"}
                         />
                       )}
@@ -988,7 +948,7 @@ function SidePanel({
   onRedo: () => void;
   canUndo: boolean;
   canRedo: boolean;
-  onGroupOp: (op: "align-l" | "align-c" | "align-r" | "align-t" | "align-m" | "align-b" | "dist-h" | "dist-v") => void;
+  onGroupOp: (op: GroupOp) => void;
   onDuplicate: () => void;
   onDelete: () => void;
   onResetMobile: () => void;
@@ -1804,8 +1764,3 @@ function modKeyLabel(): string {
   if (typeof navigator !== "undefined" && /Mac/i.test(navigator.platform)) return "⌘";
   return "Ctrl";
 }
-
-// Silence unused-warnings for unused helpers kept for future use.
-void snapToGrid;
-void CANVAS_WIDTH;
-void MOBILE_CANVAS_WIDTH;

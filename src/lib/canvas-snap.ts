@@ -32,8 +32,8 @@ export function snapToGrid(v: number): number {
  * element. For each axis we collect the element's left/center/right (or
  * top/middle/bottom) coordinates as snap targets.
  */
-function candidates(others: Element[]) {
-  const vert: number[] = [0, CANVAS_WIDTH / 2, CANVAS_WIDTH];
+function candidates(others: Element[], canvasWidth: number) {
+  const vert: number[] = [0, canvasWidth / 2, canvasWidth];
   const horiz: number[] = []; // No fixed canvas height (it grows).
   for (const e of others) {
     vert.push(e.x, e.x + e.w / 2, e.x + e.w);
@@ -53,9 +53,10 @@ function candidates(others: Element[]) {
 export function snap(
   box: Box,
   others: Element[],
-  mode: "move" | "resize-l" | "resize-r" | "resize-t" | "resize-b" | "resize-tl" | "resize-tr" | "resize-bl" | "resize-br" = "move"
+  mode: "move" | "resize-l" | "resize-r" | "resize-t" | "resize-b" | "resize-tl" | "resize-tr" | "resize-bl" | "resize-br" = "move",
+  canvasWidth: number = CANVAS_WIDTH
 ): SnapResult {
-  const { vert, horiz } = candidates(others);
+  const { vert, horiz } = candidates(others, canvasWidth);
   const guides: SnapGuide[] = [];
   let { x, y, w, h } = box;
 

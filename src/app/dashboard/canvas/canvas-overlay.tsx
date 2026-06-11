@@ -81,8 +81,10 @@ export function SelectionOverlay({
         top: box.y,
         width: box.w,
         height: box.h,
+        // Elements rotate about their center (CSS default origin) — the
+        // overlay must match or handles drift off the rotated box.
         transform: rotation ? `rotate(${rotation}deg)` : undefined,
-        transformOrigin: "0 0",
+        transformOrigin: "50% 50%",
         zIndex: 9999,
       }}
     >
