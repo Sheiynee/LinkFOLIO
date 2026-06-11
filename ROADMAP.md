@@ -137,6 +137,42 @@ Target users, in order: Twitch streamers → YouTubers / video creators → musi
 - Magic arrange: Grid / Asymmetric / Hero heuristics
 - Mobile reflow + per-element mobile overrides; editor mobile responsiveness
 - All 15 widget kinds supported in canvas mode
+- **Bug-fix pass (2026-06-11, shipped):**
+  - Mobile overrides now load — `ELEMENT_FIELDS` was missing the `mobile_x/y/w/h` columns, so saved mobile layouts silently reverted to auto-reflow on every editor load
+  - Keyboard nudge saved stale (pre-nudge) coordinates to the server — stale-ref race fixed via pure `computeNudge` helper
+  - Mobile snap guides fired at the 600px desktop positions on the 360px mobile canvas — `snap()` now takes a `canvasWidth` param
+  - Rotated elements are resizable — `resizeRotatedBox` rotates pointer deltas into local space and keeps the opposite anchor fixed; the selection overlay now rotates about center to match elements
+  - Align/distribute in mobile view writes mobile overrides instead of invisibly editing desktop coordinates (`computeGroupOp`)
+  - `batchUpdateElements` + `updateMobilePlacements` issue writes concurrently (was 1 serial round-trip per element)
+  - Drag/resize debounce saves skip cache revalidation (`skipRevalidate`); the pointerup flush always writes the final state with a full revalidate
+  - New pure-helper module `src/lib/canvas-ops.ts`; 22 new tests (285 total)
+
+---
+
+## 🎨 Canvas refinement — current focus
+
+Benchmarked against Carrd (click-to-edit immediacy), Odoo's website builder (grid mode, mobile editing toggle, saveable blocks), and Figma/Canva-class editors (layers, zoom, smart guides, numeric inputs). The gesture core is solid; the gaps are affordances and render performance.
+
+### Step 1 — Refactor before features
+- [ ] Split `canvas-editor.tsx` (~1,750 lines): gestures hook, `SidePanel`, per-type inspectors, clipboard helpers into separate files
+- [ ] Memoize the render path: `React.memo` on `ProfileCanvasRender` + `ElementBox`; dragging one element currently re-renders all N per frame
+- [ ] Cache `placementsForMobile` per render (called twice per element in the `canvasH` memo; O(N log N) each call)
+- [ ] Remove dead `updateImageMask` action
+
+### Step 2 — Quick affordances (data model already supports them)
+- [ ] Z-order controls: bring to front / forward / backward / send to back (buttons + `]`/`[` shortcuts) — `z` exists with no UI
+- [ ] Editable numeric X/Y/W/H/rotation inputs in the sidebar (currently read-only text)
+- [ ] Lock + visibility toggles — `locked` and `visible` fields exist with no UI
+
+### Step 3 — Editor-defining features
+- [ ] Inline text editing: double-click text/heading to edit in place (biggest friction point today — all content edits go through the sidebar textarea)
+- [ ] Layers panel: element list with click-to-select, drag-to-reorder z, lock/visibility toggles
+
+### Step 4 — Polish tier
+- [ ] Zoom (Ctrl+wheel, cursor-centered) and pan (space-drag)
+- [ ] Equal-spacing smart guides (Figma-style "evenly spaced" hints)
+- [ ] Smarter mobile auto-reflow: preserve aspect ratio / scale proportionally instead of forcing every element full-width at desktop height
+- [ ] "Reset all mobile overrides" action (currently per-selection only)
 
 ### Twitch EventSub (Phase 6 shipped)
 - `/api/webhooks/twitch` — HMAC-SHA256 verified, replay-guarded webhook endpoint
@@ -302,6 +338,7 @@ E2E runs separately on a schedule or pre-deploy hook (requires a running Vercel 
 [x] Write Priority 2 tests (server actions with mocked Supabase) — 61 tests, all passing
 [x] Write Priority 3 tests (API routes) — 41 tests, all passing
 [x] Write Priority 4 E2E tests (critical happy paths) — 7 scenarios, auth via session injection
+[x] Canvas bug-fix pass tests (canvas-ops, canvas-snap, db/elements, canvas actions) — 22 tests; suite now 285 passing
 ```
 
 ---
@@ -446,6 +483,29 @@ Run migrations in order in Supabase SQL Editor. Each is idempotent.
 
 ---
 
+## 🔒 Audit backlog (2026-06-11 full-app scan)
+
+Findings from a codebase + live-site audit, verified in code. Not yet fixed — ordered by impact.
+
+### High
+1. **SSRF bypass in OG scraper** — `og-scraper.ts` validates the hostname but fetches with `redirect: "follow"`; a creator URL can 302 to internal hosts/cloud metadata. Fix: `redirect: "manual"`, re-validate each hop, cap ~3.
+2. **GDPR export reads entire `block_clicks` table** — `account-actions.ts` selects with no filter then filters in JS; Supabase's 1000-row cap makes exports incomplete. Fix: `.in("block_id", ownedBlockIds)`.
+3. **Analytics silently capped at 1000 clicks** — `analytics/actions.ts` aggregates raw rows in memory; totals/referrers/countries undercount. Fix: aggregate in Postgres (extend matviews).
+4. **Analytics writes can be dropped** — page-view/click inserts are fire-and-forget (`void ...insert()`); serverless may freeze before they complete. Fix: `await` or `waitUntil`.
+
+### Medium
+5. Rate limiter is racy (read-then-upsert undercounts bursts) and 3 round-trips on the hot `/r/{id}` path → single atomic `ON CONFLICT` RPC; `pruneRateLimitBuckets` is never called (table grows forever)
+6. Twitch webhook: no `Twitch-Eventsub-Message-Id` dedupe; `stream.online` writes empty title/game until Helix backfill
+7. Public page is `force-dynamic` yet every mutation pays a DB lookup to revalidate it — pick ISR/tag caching or drop the revalidate calls; wrap `getProfileByUsername` in `cache()` (runs 2× per request)
+8. No `error.tsx` / `not-found.tsx` — outages show raw Next.js error screens on public creator pages
+9. Storage quota only grows — replaced avatars/backgrounds orphan the old object and never subtract usage
+10. CSV formula injection in analytics export; non-constant-time cron secret compare; plaintext email-change tokens with no rate limit
+
+### Low
+- Widget `<img>` tags lack `loading="lazy"` + dimensions (CLS); OG image routes lack `Cache-Control`; `block-list.tsx` is 838 lines; `theme/actions.ts` still has a private `getUsernameForUser` (refactor #5 regression); `siteBase` derivation duplicated 4×; `reorderBlocks` fires N non-transactional updates; dashboard header overflows under ~400px
+
+---
+
 ## How priorities are decided
 
 1. **Creator visibility first.** Every sprint should make a creator's page more *discoverable*, more *alive*, or more *visually distinct*.
@@ -458,4 +518,4 @@ Run migrations in order in Supabase SQL Editor. Each is idempotent.
 
 ---
 
-*Last updated: 2026-05-28 — tier-2 widgets shipped (Last.fm, Steam, Letterboxd); full refactoring backlog cleared*
+*Last updated: 2026-06-11 — canvas bug-fix pass shipped (7 fixes, 22 new tests); canvas refinement plan + full-app audit backlog added*
