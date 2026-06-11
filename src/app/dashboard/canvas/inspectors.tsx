@@ -29,6 +29,82 @@ export interface InspectorMetaProps {
   onPatchMeta: (id: string, patch: Record<string, unknown>) => void;
 }
 
+/** One numeric field with local draft state; commits on blur or Enter. */
+function NumField({
+  label,
+  value,
+  onCommit,
+  min,
+  max,
+}: {
+  label: string;
+  value: number;
+  onCommit: (v: number) => void;
+  min?: number;
+  max?: number;
+}) {
+  const [draft, setDraft] = useState(String(Math.round(value)));
+  useEffect(() => { setDraft(String(Math.round(value))); }, [value]);
+
+  function commit() {
+    let v = Number(draft);
+    if (!Number.isFinite(v)) {
+      setDraft(String(Math.round(value)));
+      return;
+    }
+    if (typeof min === "number") v = Math.max(min, v);
+    if (typeof max === "number") v = Math.min(max, v);
+    v = Math.round(v);
+    setDraft(String(v));
+    if (v !== Math.round(value)) onCommit(v);
+  }
+
+  return (
+    <label className="flex items-center gap-1 text-xs">
+      <span className="w-4 text-muted-foreground font-mono">{label}</span>
+      <Input
+        value={draft}
+        inputMode="numeric"
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+        className="h-7 px-1.5 text-xs"
+      />
+    </label>
+  );
+}
+
+export interface PositionInspectorProps {
+  element: Element;
+  placement: { x: number; y: number; w: number; h: number };
+  view: "desktop" | "mobile";
+  onPatchPlacement: (id: string, patch: { x?: number; y?: number; w?: number; h?: number; rotation?: number }) => void;
+}
+
+/** Editable numeric X/Y/W/H (+ rotation on desktop) for the selected element. */
+export function PositionInspector({ element, placement, view, onPatchPlacement }: PositionInspectorProps) {
+  return (
+    <div className="space-y-1.5 rounded-md border p-2.5">
+      <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Position</span>
+      <div className="grid grid-cols-2 gap-1.5">
+        <NumField label="X" value={placement.x} onCommit={(v) => onPatchPlacement(element.id, { x: v })} />
+        <NumField label="Y" value={placement.y} onCommit={(v) => onPatchPlacement(element.id, { y: v })} />
+        <NumField label="W" value={placement.w} min={1} onCommit={(v) => onPatchPlacement(element.id, { w: v })} />
+        <NumField label="H" value={placement.h} min={1} onCommit={(v) => onPatchPlacement(element.id, { h: v })} />
+        {view === "desktop" && (
+          <NumField
+            label="∠"
+            value={element.rotation}
+            min={-180}
+            max={180}
+            onCommit={(v) => onPatchPlacement(element.id, { rotation: v })}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function ContentInspector({ element, onPatchFields }: InspectorFieldProps) {
   // Local mirror so typing feels instant; commit on blur to avoid flooding
   // the server with one update per keystroke.

@@ -12,7 +12,7 @@ import type { Theme } from "@/lib/themes";
 import type { WidgetData } from "@/lib/widgets/types";
 import type { UserFontRecord } from "@/lib/typography";
 import { MOBILE_CANVAS_WIDTH, placementsForMobile } from "@/lib/canvas-mobile";
-import { computeGroupOp, computeNudge, type CanvasView, type GroupOp } from "@/lib/canvas-ops";
+import { computeGroupOp, computeNudge, computeZOrder, type CanvasView, type GroupOp, type ZOrderDir } from "@/lib/canvas-ops";
 import { bboxOf, MarqueeBox, SelectionOverlay, SnapGuides, type SelectionBox } from "./canvas-overlay";
 import { useCanvasHistory, diffPlacements } from "./canvas-history";
 import { useCanvasGestures } from "./use-canvas-gestures";
@@ -151,6 +151,18 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
         return;
       }
 
+      // Z-order: ] forward / [ backward, with Shift = front / back
+      if ((ev.key === "]" || ev.key === "}") && ids.length > 0) {
+        ev.preventDefault();
+        applyZOrder(ev.shiftKey ? "front" : "forward");
+        return;
+      }
+      if ((ev.key === "[" || ev.key === "{") && ids.length > 0) {
+        ev.preventDefault();
+        applyZOrder(ev.shiftKey ? "back" : "backward");
+        return;
+      }
+
       // Arrow nudge
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(ev.key) && ids.length > 0) {
         ev.preventDefault();
@@ -258,6 +270,80 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
     });
   }
 
+  // ─── Z-order ──────────────────────────────────────────────
+  function applyZOrder(dir: ZOrderDir) {
+    const ids = Array.from(selectedIdsRef.current);
+    if (ids.length === 0) return;
+    const r = computeZOrder(elementsRef.current, ids, dir);
+    if (r.patches.length === 0) return;
+    history.push(elementsRef.current);
+    setElements(r.next);
+    startTransition(async () => {
+      const res = await batchUpdateElements(r.patches);
+      if (res.error) setError(res.error);
+    });
+  }
+
+  // ─── Lock / visibility ────────────────────────────────────
+  function toggleLockSelection() {
+    const ids = Array.from(selectedIdsRef.current);
+    if (ids.length === 0) return;
+    const list = elementsRef.current.filter((e) => ids.includes(e.id));
+    // If anything is unlocked, lock everything; otherwise unlock.
+    const locked = list.some((e) => !e.locked);
+    history.push(elementsRef.current);
+    setElements((es) => es.map((e) => (ids.includes(e.id) ? { ...e, locked } : e)));
+    startTransition(async () => {
+      const res = await batchUpdateElements(ids.map((id) => ({ id, patch: { locked } })));
+      if (res.error) setError(res.error);
+    });
+  }
+
+  function toggleVisibleSelection() {
+    const ids = Array.from(selectedIdsRef.current);
+    if (ids.length === 0) return;
+    const list = elementsRef.current.filter((e) => ids.includes(e.id));
+    // If anything is visible, hide everything; otherwise show.
+    const visible = !list.some((e) => e.visible !== false);
+    history.push(elementsRef.current);
+    setElements((es) => es.map((e) => (ids.includes(e.id) ? { ...e, visible } : e)));
+    startTransition(async () => {
+      const res = await batchUpdateElements(ids.map((id) => ({ id, patch: { visible } })));
+      if (res.error) setError(res.error);
+    });
+  }
+
+  /**
+   * Type an exact position/size/rotation for one element. In mobile view the
+   * values land in the mobile override columns; desktop edits the canonical
+   * placement. Used by the numeric inputs in the side panel.
+   */
+  function patchPlacement(id: string, patch: { x?: number; y?: number; w?: number; h?: number; rotation?: number }) {
+    const el = elementsRef.current.find((e) => e.id === id);
+    if (!el) return;
+    history.push(elementsRef.current);
+    if (viewRef.current === "mobile") {
+      const current = placementsForMobile(elementsRef.current)[id];
+      const next = {
+        mobile_x: patch.x ?? current?.x ?? null,
+        mobile_y: patch.y ?? current?.y ?? null,
+        mobile_w: patch.w ?? el.mobile_w ?? null,
+        mobile_h: patch.h ?? el.mobile_h ?? null,
+      };
+      setElements((es) => es.map((e) => (e.id === id ? { ...e, ...next } : e)));
+      startTransition(async () => {
+        const res = await updateMobilePlacements([{ id, ...next }]);
+        if (res.error) setError(res.error);
+      });
+    } else {
+      setElements((es) => es.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+      startTransition(async () => {
+        const res = await updateElement(id, patch);
+        if (res.error) setError(res.error);
+      });
+    }
+  }
+
   /**
    * Update the text columns (`title`, `content`) on a selected element.
    * Used by the inline editor for text / heading / link elements.
@@ -335,6 +421,17 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
   const singleSelected = selectedIds.size === 1
     ? elements.find((e) => selectedIds.has(e.id)) ?? null
     : null;
+
+  // Effective placement of the single selection in the current view — drives
+  // the numeric inputs in the side panel.
+  const selectedPlacement = useMemo(() => {
+    if (!singleSelected) return null;
+    if (view === "desktop") {
+      const { x, y, w, h } = singleSelected;
+      return { x, y, w, h };
+    }
+    return placementsForMobile(elements)[singleSelected.id] ?? null;
+  }, [singleSelected, elements, view]);
 
   const canvasH = useMemo(() => {
     const mp = view === "mobile" ? placementsForMobile(elements) : null;
@@ -472,6 +569,11 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
             canUndo={history.canUndo()}
             canRedo={history.canRedo()}
             onGroupOp={applyGroupOp}
+            onZOrder={applyZOrder}
+            onToggleLock={toggleLockSelection}
+            onToggleVisible={toggleVisibleSelection}
+            onPatchPlacement={patchPlacement}
+            selectedPlacement={selectedPlacement}
             onDuplicate={() => doDuplicate(Array.from(selectedIds))}
             onDelete={doDeleteSelection}
             onResetMobile={resetMobileForSelection}

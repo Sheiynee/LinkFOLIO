@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeNudge, computeGroupOp, resizeRotatedBox } from "@/lib/canvas-ops";
+import { computeNudge, computeGroupOp, computeZOrder, resizeRotatedBox } from "@/lib/canvas-ops";
 import { MOBILE_INSET_TOP, MOBILE_INSET_X } from "@/lib/canvas-mobile";
 import type { Element } from "@/lib/elements";
 
@@ -88,6 +88,64 @@ describe("computeGroupOp", () => {
       mobile_w: null,
       mobile_h: null,
     });
+  });
+});
+
+describe("computeZOrder", () => {
+  const stack = () => [
+    el({ id: "a", z: 0 }),
+    el({ id: "b", z: 1 }),
+    el({ id: "c", z: 2 }),
+  ];
+
+  function zOf(r: { next: Element[] }, id: string) {
+    return r.next.find((e) => e.id === id)!.z;
+  }
+
+  it("bring to front puts the selection above everything", () => {
+    const r = computeZOrder(stack(), ["a"], "front");
+    expect(zOf(r, "a")).toBe(2);
+    expect(zOf(r, "b")).toBe(0);
+    expect(zOf(r, "c")).toBe(1);
+    expect(r.patches.length).toBeGreaterThan(0);
+  });
+
+  it("send to back puts the selection below everything", () => {
+    const r = computeZOrder(stack(), ["c"], "back");
+    expect(zOf(r, "c")).toBe(0);
+    expect(zOf(r, "a")).toBe(1);
+    expect(zOf(r, "b")).toBe(2);
+  });
+
+  it("bring forward swaps with the next element above", () => {
+    const r = computeZOrder(stack(), ["a"], "forward");
+    expect(zOf(r, "a")).toBe(1);
+    expect(zOf(r, "b")).toBe(0);
+    expect(zOf(r, "c")).toBe(2);
+  });
+
+  it("send backward swaps with the next element below", () => {
+    const r = computeZOrder(stack(), ["c"], "backward");
+    expect(zOf(r, "c")).toBe(1);
+    expect(zOf(r, "b")).toBe(2);
+  });
+
+  it("forward at the top is a no-op with no patches", () => {
+    const r = computeZOrder(stack(), ["c"], "forward");
+    expect(r.patches).toEqual([]);
+  });
+
+  it("multi-select front preserves relative order of the selection", () => {
+    const r = computeZOrder(stack(), ["a", "b"], "front");
+    expect(zOf(r, "c")).toBe(0);
+    expect(zOf(r, "a")).toBe(1);
+    expect(zOf(r, "b")).toBe(2);
+  });
+
+  it("patches only contain elements whose z changed", () => {
+    const r = computeZOrder(stack(), ["b"], "forward");
+    // a stays at z 0 — only b and c swap.
+    expect(r.patches.map((p) => p.id).sort()).toEqual(["b", "c"]);
   });
 });
 

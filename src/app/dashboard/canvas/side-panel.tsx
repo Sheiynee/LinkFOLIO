@@ -9,13 +9,15 @@ import {
   StretchHorizontal, StretchVertical, Keyboard,
   Square, Circle, Triangle, Shapes, ImageIcon, Loader2,
   Layers, Wand2,
+  BringToFront, SendToBack, ChevronUp, ChevronDown,
+  Lock, Unlock, Eye, EyeOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { Element } from "@/lib/elements";
 import { DEFAULT_ELEMENT_HEIGHTS } from "@/lib/elements";
-import type { GroupOp, CanvasView } from "@/lib/canvas-ops";
+import type { GroupOp, CanvasView, ZOrderDir } from "@/lib/canvas-ops";
 import type { ArrangeKind } from "@/lib/magic-arrange";
 import { WIDGET_PICKER_SPECS } from "@/lib/widgets/picker-specs";
 import type { WidgetKind } from "@/lib/widgets/types";
@@ -35,6 +37,7 @@ import {
   ContentInspector,
   ImageInspector,
   LinkInspector,
+  PositionInspector,
   RegionInspector,
   ShapeInspector,
   StickerInspector,
@@ -164,6 +167,11 @@ export interface SidePanelProps {
   canUndo: boolean;
   canRedo: boolean;
   onGroupOp: (op: GroupOp) => void;
+  onZOrder: (dir: ZOrderDir) => void;
+  onToggleLock: () => void;
+  onToggleVisible: () => void;
+  onPatchPlacement: (id: string, patch: { x?: number; y?: number; w?: number; h?: number; rotation?: number }) => void;
+  selectedPlacement: { x: number; y: number; w: number; h: number } | null;
   onDuplicate: () => void;
   onDelete: () => void;
   onResetMobile: () => void;
@@ -184,6 +192,11 @@ export function SidePanel({
   canUndo,
   canRedo,
   onGroupOp,
+  onZOrder,
+  onToggleLock,
+  onToggleVisible,
+  onPatchPlacement,
+  selectedPlacement,
   onDuplicate,
   onDelete,
   onResetMobile,
@@ -328,8 +341,28 @@ export function SidePanel({
             <ToolBtn onClick={() => onGroupOp("dist-h")} disabled={!canDist} title="Distribute horizontally"><StretchHorizontal className="h-4 w-4" /></ToolBtn>
             <ToolBtn onClick={() => onGroupOp("dist-v")} disabled={!canDist} title="Distribute vertically"><StretchVertical className="h-4 w-4" /></ToolBtn>
           </ClusterRow>
+          <ClusterRow label="Layer">
+            <ToolBtn onClick={() => onZOrder("front")} disabled={!hasSel} title="Bring to front (Shift+])"><BringToFront className="h-4 w-4" /></ToolBtn>
+            <ToolBtn onClick={() => onZOrder("forward")} disabled={!hasSel} title="Bring forward (])"><ChevronUp className="h-4 w-4" /></ToolBtn>
+            <ToolBtn onClick={() => onZOrder("backward")} disabled={!hasSel} title="Send backward ([)"><ChevronDown className="h-4 w-4" /></ToolBtn>
+            <ToolBtn onClick={() => onZOrder("back")} disabled={!hasSel} title="Send to back (Shift+[)"><SendToBack className="h-4 w-4" /></ToolBtn>
+          </ClusterRow>
           <ClusterRow label="Selection">
             <ToolBtn onClick={onDuplicate} disabled={!hasSel} title="Duplicate"><Copy className="h-4 w-4" /></ToolBtn>
+            <ToolBtn
+              onClick={onToggleLock}
+              disabled={!hasSel}
+              title={selectedElement?.locked ? "Unlock (locked elements can't be dragged)" : "Lock position"}
+            >
+              {selectedElement?.locked ? <Lock className="h-4 w-4 text-amber-600" /> : <Unlock className="h-4 w-4" />}
+            </ToolBtn>
+            <ToolBtn
+              onClick={onToggleVisible}
+              disabled={!hasSel}
+              title={selectedElement?.visible === false ? "Show on public page" : "Hide from public page"}
+            >
+              {selectedElement?.visible === false ? <EyeOff className="h-4 w-4 text-amber-600" /> : <Eye className="h-4 w-4" />}
+            </ToolBtn>
             {view === "mobile" && (
               <ToolBtn onClick={onResetMobile} disabled={!hasSel} title="Reset to auto-reflow"><Smartphone className="h-4 w-4" /></ToolBtn>
             )}
@@ -562,20 +595,19 @@ export function SidePanel({
               {selectedIds.size === 1 ? "Selected" : `${selectedIds.size} selected`}
             </SectionHeader>
             {selectedElement && (
-              <div className="text-xs text-muted-foreground space-y-0.5">
-                <div>type · <span className="font-mono">{selectedElement.type}</span></div>
-                <div>
-                  x · {Math.round(view === "desktop" ? selectedElement.x : (selectedElement.mobile_x ?? 0))}
-                  {"  "}·{"  "}
-                  y · {Math.round(view === "desktop" ? selectedElement.y : (selectedElement.mobile_y ?? 0))}
-                </div>
-                <div>
-                  {Math.round(view === "desktop" ? selectedElement.w : (selectedElement.mobile_w ?? selectedElement.w))}
-                  {" × "}
-                  {Math.round(view === "desktop" ? selectedElement.h : (selectedElement.mobile_h ?? selectedElement.h))}
-                </div>
-                {selectedElement.rotation ? <div>rot · {Math.round(selectedElement.rotation)}°</div> : null}
+              <div className="text-xs text-muted-foreground">
+                type · <span className="font-mono">{selectedElement.type}</span>
+                {selectedElement.locked ? <span className="ml-2 text-amber-600">locked</span> : null}
+                {selectedElement.visible === false ? <span className="ml-2 text-amber-600">hidden</span> : null}
               </div>
+            )}
+            {selectedElement && selectedPlacement && (
+              <PositionInspector
+                element={selectedElement}
+                placement={selectedPlacement}
+                view={view}
+                onPatchPlacement={onPatchPlacement}
+              />
             )}
 
             {selectedElement && (selectedElement.type === "text" || selectedElement.type === "heading") && (
@@ -627,6 +659,9 @@ export function SidePanel({
             <Shortcut keys={[mod, "+", "V"]} label="Paste" />
             <Shortcut keys={[mod, "+", "D"]} label="Duplicate" />
             <Shortcut keys={[mod, "+", "A"]} label="Select all" />
+            <Shortcut keys={["]"]} label="Bring forward" />
+            <Shortcut keys={["["]} label="Send backward" />
+            <Shortcut keys={["Shift", "+", "] ["]} label="To front / back" />
             <Shortcut keys={["Delete"]} label="Remove selection" />
             <Shortcut keys={["Shift", "+", "click"]} label="Toggle in selection" />
             <Shortcut keys={["Shift", "+", "drag rotate"]} label="Snap to 15°" />

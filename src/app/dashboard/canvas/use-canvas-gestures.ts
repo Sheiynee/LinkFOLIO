@@ -176,7 +176,7 @@ export function useCanvasGestures({
       const id = wrapper.getAttribute("data-element-id");
       if (!id) return;
       const el = elementsRef.current.find((x) => x.id === id);
-      if (!el || el.locked) return;
+      if (!el) return;
       e.preventDefault();
 
       // Shift-click: toggle in selection. Plain click on unselected: replace.
@@ -191,6 +191,10 @@ export function useCanvasGestures({
         nextSel = new Set([id]);
       }
       setSelectedIds(nextSel);
+
+      // Locked elements can be selected (so they can be unlocked / inspected)
+      // but never start a drag gesture.
+      if (el.locked) return;
 
       const startBoxes: Record<string, { x: number; y: number; w: number; h: number }> = {};
       Array.from(nextSel).forEach((sid) => {

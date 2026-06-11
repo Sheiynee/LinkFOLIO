@@ -196,6 +196,9 @@ const ElementBox = memo(function ElementBox({
     height: element.h,
     transform: element.rotation ? `rotate(${element.rotation}deg)` : undefined,
     zIndex: element.z,
+    // In the editor, hidden elements stay manipulable but render dimmed.
+    // The public page never receives them (it loads onlyVisible).
+    opacity: preview && element.visible === false ? 0.35 : undefined,
   };
 
   return (

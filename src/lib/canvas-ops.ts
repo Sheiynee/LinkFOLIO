@@ -141,6 +141,60 @@ export function computeGroupOp(
   return applyMoves(elements, moves, view);
 }
 
+export type ZOrderDir = "front" | "forward" | "backward" | "back";
+
+export interface ZOrderResult {
+  next: Element[];
+  patches: { id: string; patch: { z: number } }[];
+}
+
+/**
+ * Reorder the paint stack. Works on the full z ordering and renormalizes z
+ * to sequential indices, so repeated operations can't accumulate gaps or
+ * collisions. Multi-selections keep their relative order; forward/backward
+ * step past one unselected neighbor.
+ */
+export function computeZOrder(
+  elements: Element[],
+  ids: string[],
+  dir: ZOrderDir
+): ZOrderResult {
+  const selected = new Set(ids);
+  const order = [...elements].sort((a, b) => a.z - b.z).map((e) => e.id);
+
+  if (dir === "front") {
+    const rest = order.filter((id) => !selected.has(id));
+    const sel = order.filter((id) => selected.has(id));
+    order.splice(0, order.length, ...rest, ...sel);
+  } else if (dir === "back") {
+    const rest = order.filter((id) => !selected.has(id));
+    const sel = order.filter((id) => selected.has(id));
+    order.splice(0, order.length, ...sel, ...rest);
+  } else if (dir === "forward") {
+    for (let i = order.length - 2; i >= 0; i--) {
+      if (selected.has(order[i]) && !selected.has(order[i + 1])) {
+        [order[i], order[i + 1]] = [order[i + 1], order[i]];
+      }
+    }
+  } else if (dir === "backward") {
+    for (let i = 1; i < order.length; i++) {
+      if (selected.has(order[i]) && !selected.has(order[i - 1])) {
+        [order[i], order[i - 1]] = [order[i - 1], order[i]];
+      }
+    }
+  }
+
+  const zById = new Map(order.map((id, i) => [id, i]));
+  const patches: ZOrderResult["patches"] = [];
+  const next = elements.map((e) => {
+    const z = zById.get(e.id)!;
+    if (z === e.z) return e;
+    patches.push({ id: e.id, patch: { z } });
+    return { ...e, z };
+  });
+  return { next, patches };
+}
+
 /**
  * Resize a (possibly rotated) box from a pointer drag. The screen-space
  * pointer delta is rotated into the element's local frame, applied to the

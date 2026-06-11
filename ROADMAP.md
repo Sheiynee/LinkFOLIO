@@ -159,10 +159,10 @@ Benchmarked against Carrd (click-to-edit immediacy), Odoo's website builder (gri
 - [x] Cache `placementsForMobile` by array identity (WeakMap) — was O(N log N) per call, called many times per pointer-move frame
 - [x] Remove dead `updateImageMask` action
 
-### Step 2 — Quick affordances (data model already supports them)
-- [ ] Z-order controls: bring to front / forward / backward / send to back (buttons + `]`/`[` shortcuts) — `z` exists with no UI
-- [ ] Editable numeric X/Y/W/H/rotation inputs in the sidebar (currently read-only text)
-- [ ] Lock + visibility toggles — `locked` and `visible` fields exist with no UI
+### Step 2 — Quick affordances ✅ (2026-06-12)
+- [x] Z-order controls: bring to front / forward / backward / send to back — Layer cluster in the sidebar + `]` / `[` / `Shift+]` / `Shift+[` shortcuts; pure `computeZOrder` renormalizes z to sequential indices (7 tests)
+- [x] Editable numeric X/Y/W/H (+ rotation on desktop) inputs — `PositionInspector`, commits on blur/Enter; mobile view writes mobile overrides
+- [x] Lock + visibility toggles in the Selection cluster — locked elements stay selectable (so they can be unlocked) but can't be dragged; hidden elements render dimmed in the editor and are already excluded from the public page (`onlyVisible`)
 
 ### Step 3 — Editor-defining features
 - [ ] Inline text editing: double-click text/heading to edit in place (biggest friction point today — all content edits go through the sidebar textarea)
