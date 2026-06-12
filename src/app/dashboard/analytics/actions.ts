@@ -19,15 +19,13 @@ function cutoffDate(days: number): string | null {
   return d.toISOString().slice(0, 10);
 }
 
-function extractDomain(referrer: string | null): string {
-  if (!referrer) return "Direct";
-  try {
-    const url = new URL(referrer);
-    return url.hostname.replace(/^www\./, "");
-  } catch {
-    return "Direct";
-  }
+interface ClickStats {
+  total_clicks: number;
+  referrers: { domain: string; clicks: number }[];
+  countries: { country: string; clicks: number }[];
 }
+
+const EMPTY_CLICK_STATS: ClickStats = { total_clicks: 0, referrers: [], countries: [] };
 
 export async function getAnalyticsData(days: number): Promise<AnalyticsData | { error: string }> {
   const session = await auth();
@@ -60,38 +58,17 @@ export async function getAnalyticsData(days: number): Promise<AnalyticsData | { 
   }));
   const totalViews = viewsOverTime.reduce((s, r) => s + r.views, 0);
 
-  // Clicks from raw table (for referrer + country breakdown).
-  let clicksQuery = supabase
-    .from("block_clicks")
-    .select("block_id, referrer, country, clicked_at")
-    .in("block_id", Array.from(ownedBlockIds));
-  if (cutoff) clicksQuery = clicksQuery.gte("clicked_at", cutoff + "T00:00:00Z");
-  const { data: clickRows } = await clicksQuery;
-
-  const ownedClicks = (clickRows ?? []);
-  const totalClicks = ownedClicks.length;
-
-  // Top referrers.
-  const referrerMap = new Map<string, number>();
-  for (const c of ownedClicks) {
-    const domain = extractDomain(c.referrer);
-    referrerMap.set(domain, (referrerMap.get(domain) ?? 0) + 1);
-  }
-  const topReferrers = Array.from(referrerMap.entries())
-    .map(([domain, clicks]) => ({ domain, clicks }))
-    .sort((a, b) => b.clicks - a.clicks)
-    .slice(0, 8);
-
-  // Top countries.
-  const countryMap = new Map<string, number>();
-  for (const c of ownedClicks) {
-    const country = c.country ?? "Unknown";
-    countryMap.set(country, (countryMap.get(country) ?? 0) + 1);
-  }
-  const topCountries = Array.from(countryMap.entries())
-    .map(([country, clicks]) => ({ country, clicks }))
-    .sort((a, b) => b.clicks - a.clicks)
-    .slice(0, 8);
+  // Clicks aggregated in Postgres (`get_click_stats` RPC, migration 22).
+  // Selecting raw rows here hit Supabase's 1000-row response cap, silently
+  // undercounting totals and breakdowns for active creators.
+  const { data: clickStats } = await supabase.rpc("get_click_stats", {
+    p_user_id: userId,
+    p_cutoff: cutoff ? cutoff + "T00:00:00Z" : null,
+  });
+  const stats: ClickStats = { ...EMPTY_CLICK_STATS, ...((clickStats ?? {}) as Partial<ClickStats>) };
+  const totalClicks = stats.total_clicks;
+  const topReferrers = stats.referrers;
+  const topCountries = stats.countries;
 
   // Per-widget clicks from materialized view.
   const blockIdList = Array.from(ownedBlockIds);

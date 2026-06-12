@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rateLimit, RL_REDIRECT } from "@/lib/rate-limit";
+import { deferWrite } from "@/lib/defer";
 
 // Run at the edge — `/r/{id}` is the hottest path and benefits from
 // sub-100ms global redirects. Supabase JS v2 + the rate-limit lib both
@@ -47,10 +48,13 @@ export async function GET(
   if (!isBot) {
     const referrer = request.headers.get("referer");
     const country = request.headers.get("x-vercel-ip-country");
-    void supabase
-      .from("block_clicks")
-      .insert({ block_id: params.id, referrer, country })
-      .then(() => {});
+    // waitUntil keeps the edge function alive past the redirect response —
+    // a bare `void insert` could be frozen mid-flight and dropped.
+    deferWrite(
+      Promise.resolve(
+        supabase.from("block_clicks").insert({ block_id: params.id, referrer, country })
+      )
+    );
   }
 
   return NextResponse.redirect(block.url, { status: 302 });

@@ -471,13 +471,14 @@ Stack: Stripe Checkout + Customer Portal, webhooks → `subscriptions` table, `e
 | 19 | `19_new_widget_kinds.sql` | Widens `blocks_widget_kind_check` + `elements_widget_kind_check` with `'stream_schedule'`, `'cross_promo'`; adds `profiles.verified` |
 | 20 | `20_drop_deprecated_links.sql` | Drops the deprecated `public.links` table (superseded by `blocks` in migration 05) |
 | 21 | `21_new_widget_kinds_2.sql` | Widens both widget_kind constraints with `'lastfm_scrobbles'`, `'steam_profile'`, `'letterboxd_films'` |
+| 22 | `22_analytics_click_stats.sql` | `get_click_stats()` RPC — Postgres-side click aggregation (audit fix #3) |
 
 ### Planned migrations
 
 | # | Purpose | Phase |
 |---|---|---|
-| 22 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 (deferred) |
-| 23 | `domains`: custom domain verification | 7 |
+| 23 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 (deferred) |
+| 24 | `domains`: custom domain verification | 7 |
 
 Run migrations in order in Supabase SQL Editor. Each is idempotent.
 
@@ -487,11 +488,11 @@ Run migrations in order in Supabase SQL Editor. Each is idempotent.
 
 Findings from a codebase + live-site audit, verified in code. Not yet fixed — ordered by impact.
 
-### High
-1. **SSRF bypass in OG scraper** — `og-scraper.ts` validates the hostname but fetches with `redirect: "follow"`; a creator URL can 302 to internal hosts/cloud metadata. Fix: `redirect: "manual"`, re-validate each hop, cap ~3.
-2. **GDPR export reads entire `block_clicks` table** — `account-actions.ts` selects with no filter then filters in JS; Supabase's 1000-row cap makes exports incomplete. Fix: `.in("block_id", ownedBlockIds)`.
-3. **Analytics silently capped at 1000 clicks** — `analytics/actions.ts` aggregates raw rows in memory; totals/referrers/countries undercount. Fix: aggregate in Postgres (extend matviews).
-4. **Analytics writes can be dropped** — page-view/click inserts are fire-and-forget (`void ...insert()`); serverless may freeze before they complete. Fix: `await` or `waitUntil`.
+### High — ✅ all fixed (2026-06-13)
+1. ~~**SSRF bypass in OG scraper**~~ — `fetchHtmlBytes` now follows redirects manually: every hop re-validates against the private-IP/host denylist (DNS included), capped at 3 hops (6 new tests incl. cloud-metadata redirect)
+2. ~~**GDPR export reads entire `block_clicks` table**~~ — clicks now filter `.in("block_id", owned)` server-side AND both `page_views`/`block_clicks` paginate past the 1000-row cap (`fetchAllRows` with stable ordering)
+3. ~~**Analytics silently capped at 1000 clicks**~~ — new `get_click_stats(p_user_id, p_cutoff)` RPC (migration 22) aggregates total/top-8 referrers/top-8 countries in Postgres; domain extraction (www-strip, Direct fallback) mirrored in SQL
+4. ~~**Analytics writes can be dropped**~~ — page-view + click inserts go through `deferWrite` (`@vercel/functions` `waitUntil`, fire-and-forget fallback for local dev)
 
 ### Medium
 5. Rate limiter is racy (read-then-upsert undercounts bursts) and 3 round-trips on the hot `/r/{id}` path → single atomic `ON CONFLICT` RPC; `pruneRateLimitBuckets` is never called (table grows forever)
@@ -518,4 +519,4 @@ Findings from a codebase + live-site audit, verified in code. Not yet fixed — 
 
 ---
 
-*Last updated: 2026-06-13 — canvas refinement Step 4 shipped: zoom/pan, equal-spacing guides, proportional mobile reflow, reset-all-mobile; suite at 321 tests. Canvas refinement plan complete — next: audit backlog (high items) or Phase 6 deferred*
+*Last updated: 2026-06-13 — audit backlog high items all fixed (SSRF redirect hardening, GDPR export pagination, Postgres click aggregation via migration 22, waitUntil analytics writes); suite at 323 tests. Next: audit medium items or Phase 6 deferred*

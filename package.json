@@ -25,6 +25,7 @@
     "@supabase/supabase-js": "^2.105.3",
     "@tailwindcss/container-queries": "^0.1.1",
     "@types/jsonwebtoken": "^9.0.10",
+    "@vercel/functions": "^3.7.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "jsonwebtoken": "^9.0.3",

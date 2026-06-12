@@ -12,6 +12,7 @@ import { loadWidgetData } from "@/lib/widgets/load";
 import { getProfileByUsername } from "@/lib/db/profiles";
 import { getBlocksByUserId } from "@/lib/db/blocks";
 import { getElementsByUserId } from "@/lib/db/elements";
+import { deferWrite } from "@/lib/defer";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -27,10 +28,15 @@ async function trackPageView(profileId: string) {
   const ua = headerList.get("user-agent") ?? "";
   if (BOT_REGEX.test(ua)) return;
 
-  void createAdminClient()
-    .from("page_views")
-    .insert({ profile_id: profileId, referrer: headerList.get("referer") })
-    .then(() => {});
+  // waitUntil keeps the function alive until the insert settles — a bare
+  // `void insert` can be frozen with the response and silently dropped.
+  deferWrite(
+    Promise.resolve(
+      createAdminClient()
+        .from("page_views")
+        .insert({ profile_id: profileId, referrer: headerList.get("referer") })
+    )
+  );
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {

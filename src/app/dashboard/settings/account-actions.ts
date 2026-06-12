@@ -169,6 +169,26 @@ export async function hardDeleteAccount() {
   redirect("/");
 }
 
+const EXPORT_PAGE_SIZE = 1000;
+
+/**
+ * Drain a query past Supabase's default 1000-row response cap. The factory
+ * receives an inclusive range and must apply a stable ORDER BY so pages
+ * don't overlap.
+ */
+async function fetchAllRows<T>(
+  page: (from: number, to: number) => PromiseLike<{ data: T[] | null }>
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += EXPORT_PAGE_SIZE) {
+    const { data } = await page(from, from + EXPORT_PAGE_SIZE - 1);
+    const rows = data ?? [];
+    out.push(...rows);
+    if (rows.length < EXPORT_PAGE_SIZE) break;
+  }
+  return out;
+}
+
 /**
  * GDPR-style JSON dump of everything we hold for this user. Returns a
  * single object suitable for downloading directly from the browser.
@@ -183,27 +203,46 @@ export async function exportUserData(): Promise<
   const supabase = createAdminClient();
   const userId = session.user.id;
 
+  // Blocks first — click rows are keyed by block_id, not user_id, so the
+  // click query filters on ownership server-side instead of pulling the
+  // whole table (which Supabase caps at 1000 rows, silently truncating
+  // exports) and filtering in JS.
+  const { data: blocks } = await supabase.from("blocks").select("*").eq("user_id", userId);
+  const ownedBlockIds = (blocks ?? []).map((b) => b.id);
+
   const [
     { data: profile },
-    { data: blocks },
     { data: elements },
     { data: userFonts },
-    { data: pageViews },
-    { data: blockClicks },
+    pageViews,
+    blockClicks,
     { data: storage },
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
-    supabase.from("blocks").select("*").eq("user_id", userId),
     supabase.from("elements").select("*").eq("user_id", userId),
     supabase.from("user_fonts").select("*").eq("user_id", userId),
-    supabase.from("page_views").select("*").eq("profile_id", userId),
-    supabase.from("block_clicks").select("*"),
+    fetchAllRows((from, to) =>
+      supabase
+        .from("page_views")
+        .select("*")
+        .eq("profile_id", userId)
+        .order("viewed_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to)
+    ),
+    ownedBlockIds.length === 0
+      ? Promise.resolve([])
+      : fetchAllRows((from, to) =>
+          supabase
+            .from("block_clicks")
+            .select("*")
+            .in("block_id", ownedBlockIds)
+            .order("clicked_at", { ascending: true })
+            .order("id", { ascending: true })
+            .range(from, to)
+        ),
     supabase.from("user_storage").select("*").eq("user_id", userId).maybeSingle(),
   ]);
-
-  // block_clicks isn't keyed by user_id directly; filter by ownership.
-  const ownedBlockIds = new Set((blocks ?? []).map((b) => b.id));
-  const ownedClicks = (blockClicks ?? []).filter((c) => ownedBlockIds.has(c.block_id));
 
   await logAuditEvent("account.export", { userId });
 
@@ -216,7 +255,7 @@ export async function exportUserData(): Promise<
       elements,
       user_fonts: userFonts,
       page_views: pageViews,
-      block_clicks: ownedClicks,
+      block_clicks: blockClicks,
       storage,
     },
   };

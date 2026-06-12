@@ -5,6 +5,7 @@ import type { OgCardData } from "./types";
 
 const MAX_BYTES = 512 * 1024;
 const FETCH_TIMEOUT_MS = 5000;
+const MAX_REDIRECTS = 3;
 const USER_AGENT = "LinkFolioBot/1.0 (+https://linkfolio.app)";
 
 const PRIVATE_CIDR_PREFIXES = [
@@ -60,46 +61,71 @@ async function isPublicUrl(rawUrl: string): Promise<URL | null> {
   return url;
 }
 
-async function fetchHtmlBytes(url: URL): Promise<string | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(url.toString(), {
-      headers: {
-        "User-Agent": USER_AGENT,
-        Accept: "text/html,application/xhtml+xml",
-      },
-      redirect: "follow",
-      signal: controller.signal,
-      next: { revalidate: 60 * 60 * 24, tags: ["og"] },
-    });
-    if (!res.ok) return null;
-    const contentType = res.headers.get("content-type") ?? "";
-    if (!contentType.includes("text/html") && !contentType.includes("application/xhtml")) return null;
+/**
+ * Fetch the HTML body, following redirects MANUALLY so every hop is
+ * re-validated against the private-IP/host denylist. `redirect: "follow"`
+ * would let a creator-supplied URL 302 into internal hosts or cloud
+ * metadata endpoints after passing the initial check (SSRF).
+ */
+async function fetchHtmlBytes(startUrl: URL): Promise<string | null> {
+  let url: URL | null = startUrl;
+  for (let hop = 0; hop <= MAX_REDIRECTS && url; hop++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const res = await fetch(url.toString(), {
+        headers: {
+          "User-Agent": USER_AGENT,
+          Accept: "text/html,application/xhtml+xml",
+        },
+        redirect: "manual",
+        signal: controller.signal,
+        next: { revalidate: 60 * 60 * 24, tags: ["og"] },
+      });
 
-    const reader = res.body?.getReader();
-    if (!reader) return null;
-
-    const chunks: Uint8Array[] = [];
-    let received = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) {
-        received += value.byteLength;
-        if (received > MAX_BYTES) {
-          await reader.cancel();
-          break;
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get("location");
+        if (!location) return null;
+        let target: URL;
+        try {
+          target = new URL(location, url);
+        } catch {
+          return null;
         }
-        chunks.push(value);
+        // Each hop must independently pass the public-host check.
+        url = await isPublicUrl(target.toString());
+        continue;
       }
+
+      if (!res.ok) return null;
+      const contentType = res.headers.get("content-type") ?? "";
+      if (!contentType.includes("text/html") && !contentType.includes("application/xhtml")) return null;
+
+      const reader = res.body?.getReader();
+      if (!reader) return null;
+
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          received += value.byteLength;
+          if (received > MAX_BYTES) {
+            await reader.cancel();
+            break;
+          }
+          chunks.push(value);
+        }
+      }
+      return Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf-8");
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
     }
-    return Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf-8");
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
   }
+  return null; // redirect chain too long or a hop failed validation
 }
 
 function pickMeta(html: string, names: string[]): string | null {

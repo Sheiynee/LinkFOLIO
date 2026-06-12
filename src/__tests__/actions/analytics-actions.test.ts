@@ -14,22 +14,27 @@ const mockCreateAdminClient = vi.mocked(createAdminClient);
 const USER_ID = "user-abc";
 const SESSION = { user: { id: USER_ID } };
 
-type ClickRow = { block_id: string; referrer: string | null; country: string | null; clicked_at: string };
 type Block = { id: string; title: string; widget_kind: string | null };
+
+interface ClickStats {
+  total_clicks: number;
+  referrers: { domain: string; clicks: number }[];
+  countries: { country: string; clicks: number }[];
+}
 
 function dbForAnalytics(
   blocks: Block[],
   views: unknown[],
-  clicks: ClickRow[],
+  clickStats: ClickStats | null,
   widgetClicks: unknown[]
 ) {
   return {
     from: vi.fn()
       .mockReturnValueOnce(chain({ data: blocks, error: null }))          // blocks
       .mockReturnValueOnce(chain({ data: views, error: null }))           // mv_page_views_daily
-      .mockReturnValueOnce(chain({ data: clicks, error: null }))          // block_clicks
       .mockReturnValueOnce(chain({ data: widgetClicks, error: null })),   // mv_block_clicks_daily
-  } as unknown as ReturnType<typeof createAdminClient>;
+    rpc: vi.fn().mockResolvedValue({ data: clickStats, error: null }),
+  } as unknown as ReturnType<typeof createAdminClient> & { rpc: ReturnType<typeof vi.fn> };
 }
 
 describe("getAnalyticsData", () => {
@@ -44,7 +49,7 @@ describe("getAnalyticsData", () => {
     beforeEach(() => mockAuth.mockResolvedValue(SESSION as never));
 
     it("returns all required fields", async () => {
-      mockCreateAdminClient.mockReturnValue(dbForAnalytics([], [], [], []));
+      mockCreateAdminClient.mockReturnValue(dbForAnalytics([], [], null, []));
       const result = await getAnalyticsData(7);
       expect("error" in result).toBe(false);
       if (!("error" in result)) {
@@ -57,161 +62,102 @@ describe("getAnalyticsData", () => {
       }
     });
 
-    it("returns arrays for collection fields", async () => {
-      mockCreateAdminClient.mockReturnValue(dbForAnalytics([], [], [], []));
+    it("defaults to zero/empty when the RPC returns no data", async () => {
+      mockCreateAdminClient.mockReturnValue(dbForAnalytics([], [], null, []));
       const result = await getAnalyticsData(7);
-      if (!("error" in result)) {
-        expect(Array.isArray(result.viewsOverTime)).toBe(true);
-        expect(Array.isArray(result.topReferrers)).toBe(true);
-        expect(Array.isArray(result.topCountries)).toBe(true);
-        expect(Array.isArray(result.widgetClicks)).toBe(true);
-      }
+      if ("error" in result) throw new Error(result.error);
+      expect(result.totalClicks).toBe(0);
+      expect(result.topReferrers).toEqual([]);
+      expect(result.topCountries).toEqual([]);
     });
   });
 
-  describe("referrer domain extraction", () => {
+  describe("click stats via Postgres RPC", () => {
     beforeEach(() => mockAuth.mockResolvedValue(SESSION as never));
 
-    it("extracts hostname from a full referrer URL", async () => {
-      const clicks: ClickRow[] = [
-        { block_id: "b1", referrer: "https://twitter.com/home", country: "US", clicked_at: "2026-01-01" },
-        { block_id: "b1", referrer: "https://twitter.com/explore", country: "US", clicked_at: "2026-01-01" },
-      ];
-      mockCreateAdminClient.mockReturnValue(
-        dbForAnalytics([{ id: "b1", title: "Link", widget_kind: null }], [], clicks, [])
-      );
+    const STATS: ClickStats = {
+      total_clicks: 4321, // > 1000 — the old raw-row path couldn't report this
+      referrers: [
+        { domain: "twitter.com", clicks: 3000 },
+        { domain: "Direct", clicks: 1321 },
+      ],
+      countries: [
+        { country: "US", clicks: 4000 },
+        { country: "Unknown", clicks: 321 },
+      ],
+    };
+
+    it("passes the aggregated stats straight through", async () => {
+      mockCreateAdminClient.mockReturnValue(dbForAnalytics([], [], STATS, []));
       const result = await getAnalyticsData(30);
       if ("error" in result) throw new Error(result.error);
-      const tw = result.topReferrers.find((r) => r.domain === "twitter.com");
-      expect(tw?.clicks).toBe(2);
+      expect(result.totalClicks).toBe(4321);
+      expect(result.topReferrers).toEqual(STATS.referrers);
+      expect(result.topCountries).toEqual(STATS.countries);
     });
 
-    it("strips www. prefix from domain", async () => {
-      const clicks: ClickRow[] = [
-        { block_id: "b1", referrer: "https://www.google.com/search", country: "US", clicked_at: "2026-01-01" },
+    it("calls get_click_stats with the user id and a cutoff timestamp", async () => {
+      const db = dbForAnalytics([], [], STATS, []);
+      mockCreateAdminClient.mockReturnValue(db);
+      await getAnalyticsData(7);
+      expect(db.rpc).toHaveBeenCalledWith("get_click_stats", {
+        p_user_id: USER_ID,
+        p_cutoff: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T00:00:00Z$/),
+      });
+    });
+
+    it("passes a null cutoff for the all-time range (days=0)", async () => {
+      const db = dbForAnalytics([], [], STATS, []);
+      mockCreateAdminClient.mockReturnValue(db);
+      await getAnalyticsData(0);
+      expect(db.rpc).toHaveBeenCalledWith("get_click_stats", {
+        p_user_id: USER_ID,
+        p_cutoff: null,
+      });
+    });
+  });
+
+  describe("views over time", () => {
+    beforeEach(() => mockAuth.mockResolvedValue(SESSION as never));
+
+    it("maps daily rows and sums the total", async () => {
+      const views = [
+        { day: "2026-06-01T00:00:00", views: 5 },
+        { day: "2026-06-02T00:00:00", views: 7 },
       ];
-      mockCreateAdminClient.mockReturnValue(
-        dbForAnalytics([{ id: "b1", title: "Link", widget_kind: null }], [], clicks, [])
-      );
+      mockCreateAdminClient.mockReturnValue(dbForAnalytics([], views, null, []));
       const result = await getAnalyticsData(30);
       if ("error" in result) throw new Error(result.error);
-      expect(result.topReferrers[0].domain).toBe("google.com");
-    });
-
-    it("labels null referrer as Direct", async () => {
-      const clicks: ClickRow[] = [
-        { block_id: "b1", referrer: null, country: "US", clicked_at: "2026-01-01" },
-        { block_id: "b1", referrer: null, country: "CA", clicked_at: "2026-01-01" },
-      ];
-      mockCreateAdminClient.mockReturnValue(
-        dbForAnalytics([{ id: "b1", title: "Link", widget_kind: null }], [], clicks, [])
-      );
-      const result = await getAnalyticsData(7);
-      if ("error" in result) throw new Error(result.error);
-      const direct = result.topReferrers.find((r) => r.domain === "Direct");
-      expect(direct?.clicks).toBe(2);
-    });
-
-    it("labels an unparseable referrer string as Direct", async () => {
-      const clicks: ClickRow[] = [
-        { block_id: "b1", referrer: "not a url", country: "US", clicked_at: "2026-01-01" },
-      ];
-      mockCreateAdminClient.mockReturnValue(
-        dbForAnalytics([{ id: "b1", title: "Link", widget_kind: null }], [], clicks, [])
-      );
-      const result = await getAnalyticsData(7);
-      if ("error" in result) throw new Error(result.error);
-      expect(result.topReferrers[0].domain).toBe("Direct");
-    });
-
-    it("limits topReferrers to 8 entries", async () => {
-      const clicks: ClickRow[] = Array.from({ length: 10 }, (_, i) => ({
-        block_id: "b1",
-        referrer: `https://site${i}.example.com/`,
-        country: "US",
-        clicked_at: "2026-01-01",
-      }));
-      mockCreateAdminClient.mockReturnValue(
-        dbForAnalytics([{ id: "b1", title: "Link", widget_kind: null }], [], clicks, [])
-      );
-      const result = await getAnalyticsData(7);
-      if ("error" in result) throw new Error(result.error);
-      expect(result.topReferrers.length).toBeLessThanOrEqual(8);
+      expect(result.viewsOverTime).toEqual([
+        { date: "2026-06-01", views: 5 },
+        { date: "2026-06-02", views: 7 },
+      ]);
+      expect(result.totalViews).toBe(12);
     });
   });
 
-  describe("country aggregation", () => {
+  describe("widget clicks", () => {
     beforeEach(() => mockAuth.mockResolvedValue(SESSION as never));
 
-    it("counts clicks per country", async () => {
-      const clicks: ClickRow[] = [
-        { block_id: "b1", referrer: null, country: "US", clicked_at: "2026-01-01" },
-        { block_id: "b1", referrer: null, country: "US", clicked_at: "2026-01-01" },
-        { block_id: "b1", referrer: null, country: "GB", clicked_at: "2026-01-01" },
+    it("sums daily click rows per block and resolves block titles", async () => {
+      const blocks: Block[] = [{ id: "b1", title: "My link", widget_kind: null }];
+      const widgetClicks = [
+        { block_id: "b1", clicks: 3 },
+        { block_id: "b1", clicks: 2 },
       ];
-      mockCreateAdminClient.mockReturnValue(
-        dbForAnalytics([{ id: "b1", title: "Link", widget_kind: null }], [], clicks, [])
-      );
-      const result = await getAnalyticsData(7);
+      mockCreateAdminClient.mockReturnValue(dbForAnalytics(blocks, [], null, widgetClicks));
+      const result = await getAnalyticsData(30);
       if ("error" in result) throw new Error(result.error);
-      const us = result.topCountries.find((c) => c.country === "US");
-      expect(us?.clicks).toBe(2);
-    });
-
-    it("sorts countries by click count descending", async () => {
-      const clicks: ClickRow[] = [
-        { block_id: "b1", referrer: null, country: "GB", clicked_at: "2026-01-01" },
-        { block_id: "b1", referrer: null, country: "US", clicked_at: "2026-01-01" },
-        { block_id: "b1", referrer: null, country: "US", clicked_at: "2026-01-01" },
-      ];
-      mockCreateAdminClient.mockReturnValue(
-        dbForAnalytics([{ id: "b1", title: "Link", widget_kind: null }], [], clicks, [])
-      );
-      const result = await getAnalyticsData(7);
-      if ("error" in result) throw new Error(result.error);
-      expect(result.topCountries[0].country).toBe("US");
-    });
-
-    it("labels null country as Unknown", async () => {
-      const clicks: ClickRow[] = [
-        { block_id: "b1", referrer: null, country: null, clicked_at: "2026-01-01" },
-      ];
-      mockCreateAdminClient.mockReturnValue(
-        dbForAnalytics([{ id: "b1", title: "Link", widget_kind: null }], [], clicks, [])
-      );
-      const result = await getAnalyticsData(7);
-      if ("error" in result) throw new Error(result.error);
-      expect(result.topCountries[0].country).toBe("Unknown");
-    });
-  });
-
-  describe("click totals", () => {
-    beforeEach(() => mockAuth.mockResolvedValue(SESSION as never));
-
-    it("totalClicks equals the number of click rows returned", async () => {
-      const clicks: ClickRow[] = [
-        { block_id: "b1", referrer: null, country: "US", clicked_at: "2026-01-01" },
-        { block_id: "b1", referrer: null, country: "US", clicked_at: "2026-01-01" },
-        { block_id: "b2", referrer: null, country: "US", clicked_at: "2026-01-01" },
-      ];
-      mockCreateAdminClient.mockReturnValue(
-        dbForAnalytics(
-          [{ id: "b1", title: "L1", widget_kind: null }, { id: "b2", title: "L2", widget_kind: null }],
-          [],
-          clicks,
-          []
-        )
-      );
-      const result = await getAnalyticsData(7);
-      if ("error" in result) throw new Error(result.error);
-      expect(result.totalClicks).toBe(3);
+      expect(result.widgetClicks).toEqual([
+        { title: "My link", widget_kind: null, clicks: 5 },
+      ]);
     });
   });
 
   describe("date cutoff", () => {
     beforeEach(() => mockAuth.mockResolvedValue(SESSION as never));
 
-    it("does not apply a gte filter when days=0", async () => {
+    function sharedChainDb() {
       const sharedChain = {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
@@ -221,32 +167,24 @@ describe("getAnalyticsData", () => {
         then: (_resolve: (v: unknown) => void) =>
           Promise.resolve({ data: [], error: null }).then(_resolve),
       };
-      mockCreateAdminClient.mockReturnValue({
+      const db = {
         from: vi.fn().mockReturnValue(sharedChain),
-      } as unknown as ReturnType<typeof createAdminClient>);
+        rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
+      } as unknown as ReturnType<typeof createAdminClient>;
+      return { db, sharedChain };
+    }
 
+    it("does not apply a gte filter when days=0", async () => {
+      const { db, sharedChain } = sharedChainDb();
+      mockCreateAdminClient.mockReturnValue(db);
       await getAnalyticsData(0);
-
-      // No date cutoff should be applied when days=0
       expect(sharedChain.gte).not.toHaveBeenCalled();
     });
 
     it("applies a gte filter when days > 0", async () => {
-      const sharedChain = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        in: vi.fn().mockReturnThis(),
-        gte: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        then: (_resolve: (v: unknown) => void) =>
-          Promise.resolve({ data: [], error: null }).then(_resolve),
-      };
-      mockCreateAdminClient.mockReturnValue({
-        from: vi.fn().mockReturnValue(sharedChain),
-      } as unknown as ReturnType<typeof createAdminClient>);
-
+      const { db, sharedChain } = sharedChainDb();
+      mockCreateAdminClient.mockReturnValue(db);
       await getAnalyticsData(7);
-
       expect(sharedChain.gte).toHaveBeenCalled();
     });
   });
