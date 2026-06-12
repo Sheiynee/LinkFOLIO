@@ -164,9 +164,9 @@ Benchmarked against Carrd (click-to-edit immediacy), Odoo's website builder (gri
 - [x] Editable numeric X/Y/W/H (+ rotation on desktop) inputs — `PositionInspector`, commits on blur/Enter; mobile view writes mobile overrides
 - [x] Lock + visibility toggles in the Selection cluster — locked elements stay selectable (so they can be unlocked) but can't be dragged; hidden elements render dimmed in the editor and are already excluded from the public page (`onlyVisible`)
 
-### Step 3 — Editor-defining features
-- [ ] Inline text editing: double-click text/heading to edit in place (biggest friction point today — all content edits go through the sidebar textarea)
-- [ ] Layers panel: element list with click-to-select, drag-to-reorder z, lock/visibility toggles
+### Step 3 — Editor-defining features ✅ (2026-06-12)
+- [x] Inline text editing: double-click a text/heading element to edit it in place — double-pointerdown detection lives in the gesture layer (`onDoubleClickElement` dep); the textarea renders as an editor-side overlay (`inline-text-editor.tsx`, like the selection overlay) so the shared server/client `ProfileCanvasRender` stays hook-free. Commits on blur / Ctrl+Enter, Escape cancels; works in both desktop and mobile views and on rotated elements
+- [x] Layers panel: sidebar element list, top-most first — click-to-select (shift toggles), drag-to-reorder z (HTML5 DnD backed by pure `computeZMove`, which renormalizes z like `computeZOrder`; 8 tests), per-row lock/visibility toggles (selection-cluster toggles generalized to `toggleLockFor`/`toggleVisibleFor`). Suite now 304 passing
 
 ### Step 4 — Polish tier
 - [ ] Zoom (Ctrl+wheel, cursor-centered) and pan (space-drag)
@@ -518,4 +518,4 @@ Findings from a codebase + live-site audit, verified in code. Not yet fixed — 
 
 ---
 
-*Last updated: 2026-06-11 — canvas bug-fix pass shipped (7 fixes, 22 new tests); canvas refinement plan + full-app audit backlog added*
+*Last updated: 2026-06-12 — canvas refinement Step 3 shipped: inline text editing + layers panel; suite at 304 tests*

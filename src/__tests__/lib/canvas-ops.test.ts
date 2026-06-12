@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeNudge, computeGroupOp, computeZOrder, resizeRotatedBox } from "@/lib/canvas-ops";
+import { computeNudge, computeGroupOp, computeZOrder, computeZMove, resizeRotatedBox } from "@/lib/canvas-ops";
 import { MOBILE_INSET_TOP, MOBILE_INSET_X } from "@/lib/canvas-mobile";
 import type { Element } from "@/lib/elements";
 
@@ -146,6 +146,72 @@ describe("computeZOrder", () => {
     const r = computeZOrder(stack(), ["b"], "forward");
     // a stays at z 0 — only b and c swap.
     expect(r.patches.map((p) => p.id).sort()).toEqual(["b", "c"]);
+  });
+});
+
+describe("computeZMove", () => {
+  // Note: z values intentionally sparse to verify renormalization.
+  const stack = () => [
+    el({ id: "a", z: 0 }),
+    el({ id: "b", z: 3 }),
+    el({ id: "c", z: 7 }),
+  ];
+
+  function zOf(r: { next: Element[] }, id: string) {
+    return r.next.find((e) => e.id === id)!.z;
+  }
+
+  it("moves the bottom element to the top of the paint order", () => {
+    const r = computeZMove(stack(), "a", 2);
+    expect(zOf(r, "a")).toBe(2);
+    expect(zOf(r, "b")).toBe(0);
+    expect(zOf(r, "c")).toBe(1);
+  });
+
+  it("moves the top element to the bottom", () => {
+    const r = computeZMove(stack(), "c", 0);
+    expect(zOf(r, "c")).toBe(0);
+    expect(zOf(r, "a")).toBe(1);
+    expect(zOf(r, "b")).toBe(2);
+  });
+
+  it("moves an element to a middle slot", () => {
+    const r = computeZMove(stack(), "c", 1);
+    expect(zOf(r, "a")).toBe(0);
+    expect(zOf(r, "c")).toBe(1);
+    expect(zOf(r, "b")).toBe(2);
+  });
+
+  it("renormalizes sparse z values even when order is unchanged", () => {
+    const r = computeZMove(stack(), "b", 1);
+    expect(zOf(r, "a")).toBe(0);
+    expect(zOf(r, "b")).toBe(1);
+    expect(zOf(r, "c")).toBe(2);
+    // a kept z 0 — only b and c get patched down to dense indices.
+    expect(r.patches.map((p) => p.id).sort()).toEqual(["b", "c"]);
+  });
+
+  it("clamps a target index past the end to the top", () => {
+    const r = computeZMove(stack(), "a", 99);
+    expect(zOf(r, "a")).toBe(2);
+  });
+
+  it("clamps a negative target index to the bottom", () => {
+    const r = computeZMove(stack(), "c", -5);
+    expect(zOf(r, "c")).toBe(0);
+  });
+
+  it("returns no patches when nothing changes", () => {
+    const dense = [el({ id: "a", z: 0 }), el({ id: "b", z: 1 })];
+    const r = computeZMove(dense, "b", 1);
+    expect(r.patches).toEqual([]);
+    expect(r.next).toEqual(dense);
+  });
+
+  it("is a no-op for an unknown id", () => {
+    const dense = [el({ id: "a", z: 0 }), el({ id: "b", z: 1 })];
+    const r = computeZMove(dense, "nope", 0);
+    expect(r.patches).toEqual([]);
   });
 });
 

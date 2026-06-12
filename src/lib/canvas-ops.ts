@@ -184,6 +184,31 @@ export function computeZOrder(
     }
   }
 
+  return renormalizeZ(elements, order);
+}
+
+/**
+ * Move one element to a specific position in the paint order (0 = bottom,
+ * length-1 = top), shifting the others around it. Renormalizes z to dense
+ * sequential indices like computeZOrder. Backs the layers panel's
+ * drag-to-reorder.
+ */
+export function computeZMove(
+  elements: Element[],
+  id: string,
+  toIndex: number
+): ZOrderResult {
+  const order = [...elements].sort((a, b) => a.z - b.z).map((e) => e.id);
+  const from = order.indexOf(id);
+  if (from === -1) return { next: elements, patches: [] };
+  const to = Math.max(0, Math.min(order.length - 1, toIndex));
+  order.splice(from, 1);
+  order.splice(to, 0, id);
+  return renormalizeZ(elements, order);
+}
+
+/** Assign dense z indices from a bottom→top id ordering; patch only changes. */
+function renormalizeZ(elements: Element[], order: string[]): ZOrderResult {
   const zById = new Map(order.map((id, i) => [id, i]));
   const patches: ZOrderResult["patches"] = [];
   const next = elements.map((e) => {
@@ -192,7 +217,7 @@ export function computeZOrder(
     patches.push({ id: e.id, patch: { z } });
     return { ...e, z };
   });
-  return { next, patches };
+  return { next: patches.length === 0 ? elements : next, patches };
 }
 
 /**

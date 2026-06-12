@@ -12,10 +12,11 @@ import type { Theme } from "@/lib/themes";
 import type { WidgetData } from "@/lib/widgets/types";
 import type { UserFontRecord } from "@/lib/typography";
 import { MOBILE_CANVAS_WIDTH, placementsForMobile } from "@/lib/canvas-mobile";
-import { computeGroupOp, computeNudge, computeZOrder, type CanvasView, type GroupOp, type ZOrderDir } from "@/lib/canvas-ops";
+import { computeGroupOp, computeNudge, computeZMove, computeZOrder, type CanvasView, type GroupOp, type ZOrderDir } from "@/lib/canvas-ops";
 import { bboxOf, MarqueeBox, SelectionOverlay, SnapGuides, type SelectionBox } from "./canvas-overlay";
 import { useCanvasHistory, diffPlacements } from "./canvas-history";
 import { useCanvasGestures } from "./use-canvas-gestures";
+import { InlineTextEditor } from "./inline-text-editor";
 import { readClipboardIds, writeClipboardIds } from "./clipboard";
 import { HelperBar, SidePanel } from "./side-panel";
 import {
@@ -40,6 +41,7 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
   const [elements, setElements] = useState<Element[]>(initialElements);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [view, setView] = useState<CanvasView>("desktop");
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [scale, setScale] = useState(1);
@@ -92,6 +94,10 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
     setSelectedIds,
     pushHistory: history.push,
     setError,
+    onDoubleClickElement: (id) => {
+      const el = elementsRef.current.find((e) => e.id === id);
+      if (el && (el.type === "text" || el.type === "heading")) setEditingId(id);
+    },
   });
 
   // ─── Keyboard ─────────────────────────────────────────────
@@ -285,8 +291,7 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
   }
 
   // ─── Lock / visibility ────────────────────────────────────
-  function toggleLockSelection() {
-    const ids = Array.from(selectedIdsRef.current);
+  function toggleLockFor(ids: string[]) {
     if (ids.length === 0) return;
     const list = elementsRef.current.filter((e) => ids.includes(e.id));
     // If anything is unlocked, lock everything; otherwise unlock.
@@ -299,8 +304,7 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
     });
   }
 
-  function toggleVisibleSelection() {
-    const ids = Array.from(selectedIdsRef.current);
+  function toggleVisibleFor(ids: string[]) {
     if (ids.length === 0) return;
     const list = elementsRef.current.filter((e) => ids.includes(e.id));
     // If anything is visible, hide everything; otherwise show.
@@ -310,6 +314,29 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
     startTransition(async () => {
       const res = await batchUpdateElements(ids.map((id) => ({ id, patch: { visible } })));
       if (res.error) setError(res.error);
+    });
+  }
+
+  // ─── Layers panel ─────────────────────────────────────────
+  /** Move one element to a paint-order index (0 = back) via the layers list. */
+  function applyZMove(id: string, toIndex: number) {
+    const r = computeZMove(elementsRef.current, id, toIndex);
+    if (r.patches.length === 0) return;
+    history.push(elementsRef.current);
+    setElements(r.next);
+    startTransition(async () => {
+      const res = await batchUpdateElements(r.patches);
+      if (res.error) setError(res.error);
+    });
+  }
+
+  function selectFromLayers(id: string, additive: boolean) {
+    setSelectedIds((prev) => {
+      if (!additive) return new Set([id]);
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
   }
 
@@ -433,6 +460,20 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
     return placementsForMobile(elements)[singleSelected.id] ?? null;
   }, [singleSelected, elements, view]);
 
+  // Inline text editor target — resolves to the placement the user sees.
+  const editingElement = editingId ? elements.find((e) => e.id === editingId) ?? null : null;
+  useEffect(() => {
+    if (editingId && !elementsRef.current.some((e) => e.id === editingId)) setEditingId(null);
+  }, [editingId, elements]);
+  const editingPlacement = useMemo(() => {
+    if (!editingElement) return null;
+    if (view === "desktop") {
+      const { x, y, w, h } = editingElement;
+      return { x, y, w, h };
+    }
+    return placementsForMobile(elements)[editingElement.id] ?? null;
+  }, [editingElement, elements, view]);
+
   const canvasH = useMemo(() => {
     const mp = view === "mobile" ? placementsForMobile(elements) : null;
     const positions = elements.map((e) =>
@@ -521,6 +562,19 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
                       )}
                       <SnapGuides guides={guides} height={canvasH} />
                       <MarqueeBox box={marquee} />
+                      {editingElement && editingPlacement && (
+                        <InlineTextEditor
+                          key={editingElement.id}
+                          element={editingElement}
+                          placement={editingPlacement}
+                          rotation={view === "mobile" ? 0 : editingElement.rotation}
+                          onCommit={(content) => {
+                            patchFields(editingElement.id, { content });
+                            setEditingId(null);
+                          }}
+                          onCancel={() => setEditingId(null)}
+                        />
+                      )}
                     </>
                   }
                   onSurfaceClick={() => setSelectedIds(new Set())}
@@ -560,6 +614,7 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
             </button>
           </div>
           <SidePanel
+            elements={elements}
             selectedIds={selectedIds}
             selectedElement={singleSelected}
             view={view}
@@ -570,8 +625,12 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
             canRedo={history.canRedo()}
             onGroupOp={applyGroupOp}
             onZOrder={applyZOrder}
-            onToggleLock={toggleLockSelection}
-            onToggleVisible={toggleVisibleSelection}
+            onZMove={applyZMove}
+            onSelectLayer={selectFromLayers}
+            onToggleLock={() => toggleLockFor(Array.from(selectedIdsRef.current))}
+            onToggleVisible={() => toggleVisibleFor(Array.from(selectedIdsRef.current))}
+            onToggleLockOne={(id) => toggleLockFor([id])}
+            onToggleVisibleOne={(id) => toggleVisibleFor([id])}
             onPatchPlacement={patchPlacement}
             selectedPlacement={selectedPlacement}
             onDuplicate={() => doDuplicate(Array.from(selectedIds))}

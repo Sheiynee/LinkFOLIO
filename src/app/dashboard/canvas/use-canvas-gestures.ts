@@ -27,6 +27,8 @@ export interface CanvasGestureDeps {
   /** Push a history snapshot (the state BEFORE the gesture). */
   pushHistory: (elements: Element[]) => void;
   setError: (msg: string) => void;
+  /** Two pointerdowns on the same element within 400ms (e.g. inline text edit). */
+  onDoubleClickElement?: (id: string) => void;
 }
 
 /**
@@ -44,12 +46,14 @@ export function useCanvasGestures({
   setSelectedIds,
   pushHistory,
   setError,
+  onDoubleClickElement,
 }: CanvasGestureDeps) {
   const [guides, setGuides] = useState<SnapGuide[]>([]);
   const [marquee, setMarquee] = useState<SelectionBox | null>(null);
   const [, startTransition] = useTransition();
 
   const gestureRef = useRef<Gesture | null>(null);
+  const lastTapRef = useRef<{ id: string; time: number } | null>(null);
   const beforeGestureRef = useRef<Element[]>([]);
   const saveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -128,6 +132,9 @@ export function useCanvasGestures({
   // ─── Gesture: pointerdown router ───────────────────────────
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
+    // The inline text editor lives above the canvas — let it keep native
+    // focus/selection behavior instead of starting a gesture.
+    if (target.closest("[data-inline-editor]")) return;
     const m = canvasMetrics();
     if (!m) return;
     const px = (e.clientX - m.rect.left) / m.scale;
@@ -192,6 +199,16 @@ export function useCanvasGestures({
       }
       setSelectedIds(nextSel);
 
+      // Double pointerdown on the same element → inline edit instead of drag.
+      const now = performance.now();
+      const lastTap = lastTapRef.current;
+      lastTapRef.current = { id, time: now };
+      if (!e.shiftKey && lastTap && lastTap.id === id && now - lastTap.time < 400) {
+        lastTapRef.current = null;
+        onDoubleClickElement?.(id);
+        return;
+      }
+
       // Locked elements can be selected (so they can be unlocked / inspected)
       // but never start a drag gesture.
       if (el.locked) return;
@@ -223,7 +240,7 @@ export function useCanvasGestures({
     };
     if (!e.shiftKey) setSelectedIds(new Set());
     setMarquee({ x: px, y: py, w: 0, h: 0 });
-  }, [canvasMetrics, elementsRef, selectedIdsRef, setSelectedIds, viewRef, visiblePlacement]);
+  }, [canvasMetrics, elementsRef, onDoubleClickElement, selectedIdsRef, setSelectedIds, viewRef, visiblePlacement]);
 
   // ─── Window-level pointermove/up while a gesture is active ──
   useEffect(() => {

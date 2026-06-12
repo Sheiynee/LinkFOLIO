@@ -32,6 +32,7 @@ import {
   createWidgetElementFromUrl,
   uploadAndCreateImageElement,
 } from "./actions";
+import { LayersPanel } from "./layers-panel";
 import {
   ButtonInspector,
   ContentInspector,
@@ -50,7 +51,7 @@ export function HelperBar({ selectionCount, view }: { selectionCount: number; vi
         ? "Mobile preview · drag a widget to set mobile-specific positions, or hit Reset in the sidebar to fall back to auto-reflow."
         : "Click an element to select · drag empty space to marquee-select · add new elements from the sidebar →"
       : selectionCount === 1
-        ? "Drag to move · drag the handles to resize · the small dot above the box rotates · arrow keys nudge (shift = 10px)."
+        ? "Drag to move · handles resize · the dot above rotates · arrows nudge (shift = 10px) · double-click text to edit in place."
         : `${selectionCount} selected · use the align/distribute buttons in the sidebar or drag the group together.`;
   return (
     <Card className="px-3 py-2 text-xs text-muted-foreground">
@@ -158,6 +159,7 @@ function modKeyLabel(): string {
 }
 
 export interface SidePanelProps {
+  elements: Element[];
   selectedIds: Set<string>;
   selectedElement: Element | null;
   view: CanvasView;
@@ -168,8 +170,12 @@ export interface SidePanelProps {
   canRedo: boolean;
   onGroupOp: (op: GroupOp) => void;
   onZOrder: (dir: ZOrderDir) => void;
+  onZMove: (id: string, toIndex: number) => void;
+  onSelectLayer: (id: string, additive: boolean) => void;
   onToggleLock: () => void;
   onToggleVisible: () => void;
+  onToggleLockOne: (id: string) => void;
+  onToggleVisibleOne: (id: string) => void;
   onPatchPlacement: (id: string, patch: { x?: number; y?: number; w?: number; h?: number; rotation?: number }) => void;
   selectedPlacement: { x: number; y: number; w: number; h: number } | null;
   onDuplicate: () => void;
@@ -183,6 +189,7 @@ export interface SidePanelProps {
 }
 
 export function SidePanel({
+  elements,
   selectedIds,
   selectedElement,
   view,
@@ -193,8 +200,12 @@ export function SidePanel({
   canRedo,
   onGroupOp,
   onZOrder,
+  onZMove,
+  onSelectLayer,
   onToggleLock,
   onToggleVisible,
+  onToggleLockOne,
+  onToggleVisibleOne,
   onPatchPlacement,
   selectedPlacement,
   onDuplicate,
@@ -412,6 +423,21 @@ export function SidePanel({
             </Button>
           </ClusterRow>
         </div>
+      </div>
+
+      <div className="border-t" />
+
+      {/* ── Layers ── */}
+      <div>
+        <SectionHeader icon={<Layers className="h-3.5 w-3.5" />}>Layers</SectionHeader>
+        <LayersPanel
+          elements={elements}
+          selectedIds={selectedIds}
+          onSelect={onSelectLayer}
+          onMove={onZMove}
+          onToggleLock={onToggleLockOne}
+          onToggleVisible={onToggleVisibleOne}
+        />
       </div>
 
       <div className="border-t" />
@@ -664,6 +690,7 @@ export function SidePanel({
             <Shortcut keys={["Shift", "+", "] ["]} label="To front / back" />
             <Shortcut keys={["Delete"]} label="Remove selection" />
             <Shortcut keys={["Shift", "+", "click"]} label="Toggle in selection" />
+            <Shortcut keys={["2×", "click"]} label="Edit text in place" />
             <Shortcut keys={["Shift", "+", "drag rotate"]} label="Snap to 15°" />
           </div>
         )}
