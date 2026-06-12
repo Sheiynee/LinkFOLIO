@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAuditEvent } from "@/lib/audit-log";
+import { hashEmailToken } from "@/lib/email-tokens";
 
 export const dynamic = "force-dynamic";
 
@@ -11,10 +12,12 @@ export async function GET(request: NextRequest) {
   const supabase = createAdminClient();
   const now = new Date().toISOString();
 
+  // Tokens are stored hashed (see lib/email-tokens.ts) — hash the incoming
+  // value for the lookup so a DB leak can't be replayed here.
   const { data: row, error } = await supabase
     .from("email_change_tokens")
     .select("id, user_id, new_email")
-    .eq("token", token)
+    .eq("token", hashEmailToken(token))
     .gt("expires_at", now)
     .is("used_at", null)
     .single();

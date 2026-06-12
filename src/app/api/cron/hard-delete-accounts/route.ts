@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAuditEvent } from "@/lib/audit-log";
+import { verifyCronSecret } from "@/lib/cron-auth";
+import { pruneRateLimitBuckets } from "@/lib/rate-limit";
 
 /**
  * Cron-triggered cleanup of accounts that passed their 30-day grace window.
@@ -23,16 +25,19 @@ function unauthorized() {
 }
 
 export async function GET(request: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return new NextResponse("CRON_SECRET not configured", { status: 500 });
-
-  const header = request.headers.get("authorization");
-  // Accept both "Bearer <secret>" (Vercel Cron style) and "<secret>".
-  const provided = header?.startsWith("Bearer ") ? header.slice(7) : header;
-  if (provided !== secret) return unauthorized();
+  if (!process.env.CRON_SECRET) return new NextResponse("CRON_SECRET not configured", { status: 500 });
+  if (!verifyCronSecret(request.headers.get("authorization"))) return unauthorized();
 
   const supabase = createAdminClient();
   const now = new Date().toISOString();
+
+  // Housekeeping piggybacked on the daily cron: drop rate-limit buckets and
+  // webhook dedupe rows that have aged out of any window.
+  await pruneRateLimitBuckets(60 * 60);
+  await supabase
+    .from("twitch_webhook_messages")
+    .delete()
+    .lt("received_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
 
   // Pull every profile whose grace window has expired.
   const { data: expired, error } = await supabase

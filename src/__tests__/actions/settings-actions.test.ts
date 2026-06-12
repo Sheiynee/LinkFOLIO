@@ -16,6 +16,7 @@ vi.mock("@/lib/image-magic", () => ({
 vi.mock("@/lib/storage-quota", () => ({
   ensureStorageHeadroom: vi.fn().mockResolvedValue({ ok: true }),
   addStorageUsage: vi.fn().mockResolvedValue(undefined),
+  cleanupReplacedUploads: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/lib/rate-limit", () => ({
   rateLimit: vi.fn().mockResolvedValue({ allowed: true }),

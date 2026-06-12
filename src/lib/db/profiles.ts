@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const PROFILE_FIELDS =
@@ -17,20 +18,23 @@ export interface ProfileRow {
   deleted_grace_until: string | null;
 }
 
-export async function getProfileByUsername(username: string): Promise<ProfileRow | null> {
+// cache() dedupes within one request render — the public page calls
+// getProfileByUsername from both generateMetadata and the page component,
+// which used to cost two identical queries per visit.
+export const getProfileByUsername = cache(async (username: string): Promise<ProfileRow | null> => {
   const { data } = await createAdminClient()
     .from("profiles")
     .select(PROFILE_FIELDS)
     .eq("username", username.toLowerCase())
     .maybeSingle();
   return data as ProfileRow | null;
-}
+});
 
-export async function getProfileById(userId: string): Promise<ProfileRow | null> {
+export const getProfileById = cache(async (userId: string): Promise<ProfileRow | null> => {
   const { data } = await createAdminClient()
     .from("profiles")
     .select(PROFILE_FIELDS)
     .eq("id", userId)
     .maybeSingle();
   return data as ProfileRow | null;
-}
+});

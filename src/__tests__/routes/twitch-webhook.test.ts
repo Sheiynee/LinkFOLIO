@@ -3,9 +3,11 @@ import { createHmac } from "crypto";
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/audit-log", () => ({ logAuditEvent: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/lib/widgets/twitch", () => ({ fetchHelixStream: vi.fn().mockResolvedValue(null) }));
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAuditEvent } from "@/lib/audit-log";
+import { fetchHelixStream } from "@/lib/widgets/twitch";
 import { POST } from "@/app/api/webhooks/twitch/route";
 import { chain, mockDb } from "../helpers/supabase-mock";
 
@@ -170,6 +172,86 @@ describe("POST /api/webhooks/twitch", () => {
       expect(res.status).toBe(200);
       expect(upsertChain.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ channel: "streamer", is_live: false })
+      );
+    });
+  });
+
+  describe("message-id dedupe", () => {
+    it("acks a retried message id without re-processing", async () => {
+      const dedupeChain = chain({ data: null, error: { code: "23505", message: "duplicate key" } });
+      const upsertChain = chain({ data: null, error: null });
+      mockCreateAdminClient.mockReturnValue({
+        from: vi.fn((table: string) =>
+          table === "twitch_webhook_messages" ? dedupeChain : upsertChain
+        ),
+      } as never);
+
+      const body = JSON.stringify({
+        subscription: { type: "stream.online" },
+        event: { broadcaster_user_login: "streamer", broadcaster_user_id: "1" },
+      });
+      const res = await POST(makeReq("notification", body) as never);
+      expect(res.status).toBe(200);
+      expect(upsertChain.upsert).not.toHaveBeenCalled();
+    });
+
+    it("records the message id on first delivery", async () => {
+      const dedupeChain = chain({ data: null, error: null });
+      const upsertChain = chain({ data: null, error: null });
+      mockCreateAdminClient.mockReturnValue({
+        from: vi.fn((table: string) =>
+          table === "twitch_webhook_messages" ? dedupeChain : upsertChain
+        ),
+      } as never);
+
+      const body = JSON.stringify({
+        subscription: { type: "stream.online" },
+        event: { broadcaster_user_login: "streamer", broadcaster_user_id: "1" },
+      });
+      await POST(makeReq("notification", body) as never);
+      expect(dedupeChain.insert).toHaveBeenCalledWith({ id: expect.stringMatching(/^msg-/) });
+      expect(upsertChain.upsert).toHaveBeenCalled();
+    });
+  });
+
+  describe("Helix backfill on stream.online", () => {
+    it("writes the live title/game/viewers from Helix", async () => {
+      vi.mocked(fetchHelixStream).mockResolvedValueOnce({
+        title: "Speedrun!",
+        game_name: "Celeste",
+        viewer_count: 321,
+        started_at: "2026-06-13T10:00:00Z",
+      });
+      const upsertChain = chain({ data: null, error: null });
+      mockCreateAdminClient.mockReturnValue({ from: vi.fn().mockReturnValue(upsertChain) } as never);
+
+      const body = JSON.stringify({
+        subscription: { type: "stream.online" },
+        event: { broadcaster_user_login: "streamer", broadcaster_user_id: "1" },
+      });
+      await POST(makeReq("notification", body) as never);
+      expect(upsertChain.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          stream_title: "Speedrun!",
+          game_name: "Celeste",
+          viewer_count: 321,
+          started_at: "2026-06-13T10:00:00Z",
+        })
+      );
+    });
+
+    it("writes nulls (not empty strings) when Helix has no data yet", async () => {
+      vi.mocked(fetchHelixStream).mockResolvedValueOnce(null);
+      const upsertChain = chain({ data: null, error: null });
+      mockCreateAdminClient.mockReturnValue({ from: vi.fn().mockReturnValue(upsertChain) } as never);
+
+      const body = JSON.stringify({
+        subscription: { type: "stream.online" },
+        event: { broadcaster_user_login: "streamer", broadcaster_user_id: "1" },
+      });
+      await POST(makeReq("notification", body) as never);
+      expect(upsertChain.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ stream_title: null, game_name: null })
       );
     });
   });

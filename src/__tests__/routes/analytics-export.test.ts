@@ -131,6 +131,25 @@ describe("GET /api/analytics/export", () => {
     });
   });
 
+  describe("formula injection", () => {
+    it("neutralizes block titles starting with = + - @", async () => {
+      mockGetAnalyticsData.mockResolvedValue({
+        ...EMPTY_DATA,
+        widgetClicks: [
+          { title: "=HYPERLINK(\"http://evil\",\"x\")", widget_kind: null, clicks: 1 },
+          { title: "+1234", widget_kind: null, clicks: 1 },
+          { title: "@SUM(A1)", widget_kind: null, clicks: 1 },
+        ],
+      });
+      const body = await (await GET(mockReq())).text();
+      // Each dangerous cell gets an apostrophe guard so spreadsheets treat it as text.
+      expect(body).toContain("\"'=HYPERLINK(\"\"http://evil\"\",\"\"x\"\")\"");
+      expect(body).toContain("\"'+1234\"");
+      expect(body).toContain("\"'@SUM(A1)\"");
+      expect(body).not.toContain("\"=HYPERLINK");
+    });
+  });
+
   describe("error handling", () => {
     it("returns 500 when getAnalyticsData returns an error", async () => {
       mockGetAnalyticsData.mockResolvedValue({ error: "DB unavailable" });

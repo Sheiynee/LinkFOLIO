@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendWeeklyDigest } from "@/lib/email";
 import { logAuditEvent } from "@/lib/audit-log";
+import { verifyCronSecret } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -10,12 +11,8 @@ function unauthorized() {
 }
 
 export async function GET(request: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return new NextResponse("CRON_SECRET not configured", { status: 500 });
-
-  const header = request.headers.get("authorization");
-  const provided = header?.startsWith("Bearer ") ? header.slice(7) : header;
-  if (provided !== secret) return unauthorized();
+  if (!process.env.CRON_SECRET) return new NextResponse("CRON_SECRET not configured", { status: 500 });
+  if (!verifyCronSecret(request.headers.get("authorization"))) return unauthorized();
 
   const supabase = createAdminClient();
   const now = new Date();

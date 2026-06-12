@@ -52,47 +52,34 @@ export async function rateLimit(
   // the same second all hit the same row.
   const bucketSize = Math.max(1, Math.floor(config.windowSeconds / 6));
   const windowStartMs = Math.floor(now.getTime() / (bucketSize * 1000)) * bucketSize * 1000;
-  const windowStart = new Date(windowStartMs);
-
-  // Upsert increment. Two callers in the same bucket race here, but the row
-  // is keyed by (scope, key, window_start) so the second one's update lands.
-  const { data: existing } = await supabase
-    .from("rate_limit_buckets")
-    .select("count")
-    .eq("scope", config.scope)
-    .eq("key", key)
-    .eq("window_start", windowStart.toISOString())
-    .maybeSingle();
-  const nextCount = (existing?.count ?? 0) + 1;
-  await supabase
-    .from("rate_limit_buckets")
-    .upsert(
-      { scope: config.scope, key, window_start: windowStart.toISOString(), count: nextCount },
-      { onConflict: "scope,key,window_start" }
-    );
-
-  // Sum the last `windowSeconds` of buckets for this scope/key.
   const cutoff = new Date(now.getTime() - config.windowSeconds * 1000);
-  const { data: buckets } = await supabase
-    .from("rate_limit_buckets")
-    .select("count, window_start")
-    .eq("scope", config.scope)
-    .eq("key", key)
-    .gte("window_start", cutoff.toISOString());
-  const used = (buckets ?? []).reduce((sum, b) => sum + Number(b.count ?? 0), 0);
+
+  // Single atomic round trip (`rate_limit_hit` RPC, migration 23):
+  // INSERT .. ON CONFLICT DO UPDATE count+1, then sum the window. The old
+  // read→upsert→sum sequence was 3 round trips and undercounted bursts —
+  // concurrent callers read the same count and both wrote count+1.
+  const { data, error } = await supabase.rpc("rate_limit_hit", {
+    p_scope: config.scope,
+    p_key: key,
+    p_window_start: new Date(windowStartMs).toISOString(),
+    p_cutoff: cutoff.toISOString(),
+  });
+
+  if (error || !data) {
+    // Fail open: rate limiting is best-effort protection, not an auth gate.
+    return { allowed: true, used: 0, limit: config.limit, retryAfterSeconds: 0 };
+  }
+
+  const result = data as { used: number; oldest: string | null };
+  const used = Number(result.used ?? 0);
 
   let retryAfterSeconds = 0;
-  if (used >= config.limit) {
-    const oldest = (buckets ?? []).reduce<Date | null>((min, b) => {
-      const d = new Date(b.window_start);
-      return !min || d < min ? d : min;
-    }, null);
-    if (oldest) {
-      retryAfterSeconds = Math.max(
-        0,
-        Math.ceil((oldest.getTime() + config.windowSeconds * 1000 - now.getTime()) / 1000)
-      );
-    }
+  if (used >= config.limit && result.oldest) {
+    const oldest = new Date(result.oldest);
+    retryAfterSeconds = Math.max(
+      0,
+      Math.ceil((oldest.getTime() + config.windowSeconds * 1000 - now.getTime()) / 1000)
+    );
   }
 
   return {

@@ -4,6 +4,17 @@ import { getAnalyticsData } from "@/app/dashboard/analytics/actions";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Quote a CSV cell and neutralize spreadsheet formula injection: block
+ * titles are user-controlled, and Excel/Sheets execute cells starting with
+ * = + - @ (or a tab/CR smuggled before them) when the file is opened.
+ */
+function csvCell(cell: string): string {
+  const needsGuard = /^[=+\-@\t\r]/.test(cell);
+  const guarded = needsGuard ? `'${cell}` : cell;
+  return `"${guarded.replace(/"/g, '""')}"`;
+}
+
 export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return new NextResponse("Unauthorized", { status: 401 });
@@ -28,7 +39,7 @@ export async function GET(request: NextRequest) {
   rows.push([], ["=== Clicks by Block ==="], ["Title", "Widget Kind", "Clicks"]);
   for (const r of result.widgetClicks) rows.push([r.title, r.widget_kind ?? "", String(r.clicks)]);
 
-  const csv = rows.map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(",")).join("\n");
+  const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n");
   const filename = `linkfolio-analytics-${new Date().toISOString().slice(0, 10)}.csv`;
 
   return new NextResponse(csv, {

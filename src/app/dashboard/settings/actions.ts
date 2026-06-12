@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { isReservedUsername } from "@/lib/reserved-usernames";
 import { validateImageFile } from "@/lib/image-magic";
-import { addStorageUsage, ensureStorageHeadroom } from "@/lib/storage-quota";
+import { addStorageUsage, cleanupReplacedUploads, ensureStorageHeadroom } from "@/lib/storage-quota";
 import { rateLimit, RL_UPLOAD } from "@/lib/rate-limit";
 import { sanitizeShortText, sanitizeMultilineText } from "@/lib/sanitize";
 import { logAuditEvent } from "@/lib/audit-log";
@@ -110,6 +110,15 @@ export async function uploadAvatar(formData: FormData) {
     .update({ avatar_url: publicUrl, updated_at: new Date().toISOString() })
     .eq("id", session.user.id);
   if (error) return { error: error.message };
+
+  // The profile now points at the new file — every other avatar-* object in
+  // the folder is orphaned. Delete them and give the quota bytes back.
+  await cleanupReplacedUploads({
+    userId: session.user.id,
+    bucket: "avatars",
+    filePrefix: "avatar-",
+    keep: (name) => path.endsWith(name),
+  });
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/settings");

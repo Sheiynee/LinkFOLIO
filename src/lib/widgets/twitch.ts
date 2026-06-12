@@ -96,6 +96,25 @@ interface HelixStreamsResponse {
   }>;
 }
 
+export interface HelixStreamSnapshot {
+  title: string;
+  game_name: string;
+  viewer_count: number;
+  started_at: string;
+}
+
+/**
+ * Uncached Helix stream lookup. Used by the EventSub webhook to fill
+ * title/game/viewers the moment a stream.online event arrives — the event
+ * payload itself carries none of those fields.
+ */
+export async function fetchHelixStream(login: string): Promise<HelixStreamSnapshot | null> {
+  const res = await helix<HelixStreamsResponse>("/streams", { user_login: login.toLowerCase() }, 0);
+  const s = res?.data?.[0];
+  if (!s) return null;
+  return { title: s.title, game_name: s.game_name, viewer_count: s.viewer_count, started_at: s.started_at };
+}
+
 export async function getTwitchLiveStatus(channel: string): Promise<TwitchLiveData | null> {
   const login = channel.trim().toLowerCase();
   if (!login) return null;

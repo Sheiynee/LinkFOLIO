@@ -7,7 +7,7 @@ import { normalizeTheme, type Theme } from "@/lib/themes";
 import { sanitizeFamilyName } from "@/lib/typography";
 import { getUserFontUsageBytes } from "@/lib/user-fonts";
 import { validateImageFile } from "@/lib/image-magic";
-import { addStorageUsage, ensureStorageHeadroom, subtractStorageUsage } from "@/lib/storage-quota";
+import { addStorageUsage, cleanupReplacedUploads, ensureStorageHeadroom, subtractStorageUsage } from "@/lib/storage-quota";
 import { rateLimit, RL_UPLOAD } from "@/lib/rate-limit";
 
 const MAX_FONT_BYTES = 1024 * 1024; // 1 MB per file (woff2)
@@ -145,6 +145,24 @@ export async function uploadBackgroundImage(formData: FormData) {
 
   const { data: { publicUrl } } = supabase.storage.from("backgrounds").getPublicUrl(path);
   await addStorageUsage(session.user.id, file.size);
+
+  // Reclaim space from background images no longer referenced by the theme.
+  // The 24h grace window protects files that were just uploaded but not yet
+  // saved into a layer; theme JSON is matched by filename.
+  const { data: prof } = await supabase
+    .from("profiles")
+    .select("theme")
+    .eq("id", session.user.id)
+    .maybeSingle();
+  const themeJson = JSON.stringify(prof?.theme ?? {});
+  await cleanupReplacedUploads({
+    userId: session.user.id,
+    bucket: "backgrounds",
+    filePrefix: "bg-",
+    keep: (name) => path.endsWith(name) || themeJson.includes(name),
+    minAgeMs: 24 * 60 * 60 * 1000,
+  });
+
   return { ok: true, url: publicUrl };
 }
 

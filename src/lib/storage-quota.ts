@@ -72,6 +72,45 @@ export async function addStorageUsage(userId: string, bytes: number): Promise<vo
     );
 }
 
+/**
+ * Best-effort cleanup of superseded uploads in `${userId}/` of a bucket:
+ * removes files matching `filePrefix` that the `keep` predicate rejects
+ * (optionally only past `minAgeMs`) and subtracts their sizes from the
+ * quota counter. Without this, every replaced avatar/background orphans
+ * the old object and the quota only ever grows.
+ */
+export async function cleanupReplacedUploads(opts: {
+  userId: string;
+  bucket: string;
+  filePrefix: string;
+  keep: (name: string) => boolean;
+  minAgeMs?: number;
+}): Promise<void> {
+  const supabase = createAdminClient();
+  const { data: list } = await supabase.storage.from(opts.bucket).list(opts.userId);
+  if (!list || list.length === 0) return;
+
+  const now = Date.now();
+  const doomed = list.filter((f) => {
+    if (!f.name.startsWith(opts.filePrefix)) return false;
+    if (opts.keep(f.name)) return false;
+    if (opts.minAgeMs) {
+      const created = new Date(f.created_at ?? 0).getTime();
+      if (now - created < opts.minAgeMs) return false;
+    }
+    return true;
+  });
+  if (doomed.length === 0) return;
+
+  const { error } = await supabase.storage
+    .from(opts.bucket)
+    .remove(doomed.map((f) => `${opts.userId}/${f.name}`));
+  if (error) return; // leave the counter alone if the delete failed
+
+  const bytes = doomed.reduce((s, f) => s + Number((f.metadata as { size?: number } | null)?.size ?? 0), 0);
+  await subtractStorageUsage(opts.userId, bytes);
+}
+
 export async function subtractStorageUsage(userId: string, bytes: number): Promise<void> {
   if (bytes <= 0) return;
   const supabase = createAdminClient();

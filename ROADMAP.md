@@ -472,13 +472,14 @@ Stack: Stripe Checkout + Customer Portal, webhooks → `subscriptions` table, `e
 | 20 | `20_drop_deprecated_links.sql` | Drops the deprecated `public.links` table (superseded by `blocks` in migration 05) |
 | 21 | `21_new_widget_kinds_2.sql` | Widens both widget_kind constraints with `'lastfm_scrobbles'`, `'steam_profile'`, `'letterboxd_films'` |
 | 22 | `22_analytics_click_stats.sql` | `get_click_stats()` RPC — Postgres-side click aggregation (audit fix #3) |
+| 23 | `23_rate_limit_rpc_and_webhook_dedupe.sql` | `rate_limit_hit()` atomic RPC + `twitch_webhook_messages` dedupe table (audit fixes #5, #6) |
 
 ### Planned migrations
 
 | # | Purpose | Phase |
 |---|---|---|
-| 23 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 (deferred) |
-| 24 | `domains`: custom domain verification | 7 |
+| 24 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 (deferred) |
+| 25 | `domains`: custom domain verification | 7 |
 
 Run migrations in order in Supabase SQL Editor. Each is idempotent.
 
@@ -494,13 +495,13 @@ Findings from a codebase + live-site audit, verified in code. Not yet fixed — 
 3. ~~**Analytics silently capped at 1000 clicks**~~ — new `get_click_stats(p_user_id, p_cutoff)` RPC (migration 22) aggregates total/top-8 referrers/top-8 countries in Postgres; domain extraction (www-strip, Direct fallback) mirrored in SQL
 4. ~~**Analytics writes can be dropped**~~ — page-view + click inserts go through `deferWrite` (`@vercel/functions` `waitUntil`, fire-and-forget fallback for local dev)
 
-### Medium
-5. Rate limiter is racy (read-then-upsert undercounts bursts) and 3 round-trips on the hot `/r/{id}` path → single atomic `ON CONFLICT` RPC; `pruneRateLimitBuckets` is never called (table grows forever)
-6. Twitch webhook: no `Twitch-Eventsub-Message-Id` dedupe; `stream.online` writes empty title/game until Helix backfill
-7. Public page is `force-dynamic` yet every mutation pays a DB lookup to revalidate it — pick ISR/tag caching or drop the revalidate calls; wrap `getProfileByUsername` in `cache()` (runs 2× per request)
-8. No `error.tsx` / `not-found.tsx` — outages show raw Next.js error screens on public creator pages
-9. Storage quota only grows — replaced avatars/backgrounds orphan the old object and never subtract usage
-10. CSV formula injection in analytics export; non-constant-time cron secret compare; plaintext email-change tokens with no rate limit
+### Medium — ✅ all fixed (2026-06-13)
+5. ~~Racy rate limiter~~ — `rate_limit_hit` RPC (migration 23): atomic `INSERT … ON CONFLICT DO UPDATE` + window sum in one round trip (was 3, undercounted bursts); fails open on RPC error; `pruneRateLimitBuckets` now runs from the daily hard-delete cron (4 new tests)
+6. ~~Twitch webhook gaps~~ — `twitch_webhook_messages` PK table dedupes retried message ids (23505 → ack without reprocessing); `stream.online` now pulls a Helix snapshot for title/game/viewers immediately instead of writing empty strings (4 new tests)
+7. ~~Double profile lookup~~ — `getProfileByUsername`/`getProfileById` wrapped in React `cache()` (generateMetadata + page shared one query). ISR-vs-force-dynamic decision deferred — live data stays force-dynamic for now
+8. ~~No error pages~~ — branded `app/error.tsx` (reset + digest ref) and `app/not-found.tsx`
+9. ~~Storage quota only grows~~ — `cleanupReplacedUploads` removes superseded `avatar-*` files on replace and unreferenced `bg-*` files older than 24h (theme-JSON reference check), subtracting reclaimed bytes
+10. ~~Small security trio~~ — CSV cells starting with `= + - @ \t \r` get an apostrophe guard; cron secret compare is constant-time (`verifyCronSecret`, sha256 + `timingSafeEqual`); email-change tokens stored as sha256 hashes + `requestEmailChange` rate-limited (RL_AUTH)
 
 ### Low
 - Widget `<img>` tags lack `loading="lazy"` + dimensions (CLS); OG image routes lack `Cache-Control`; `block-list.tsx` is 838 lines; `theme/actions.ts` still has a private `getUsernameForUser` (refactor #5 regression); `siteBase` derivation duplicated 4×; `reorderBlocks` fires N non-transactional updates; dashboard header overflows under ~400px
@@ -519,4 +520,4 @@ Findings from a codebase + live-site audit, verified in code. Not yet fixed — 
 
 ---
 
-*Last updated: 2026-06-13 — audit backlog high items all fixed (SSRF redirect hardening, GDPR export pagination, Postgres click aggregation via migration 22, waitUntil analytics writes); suite at 323 tests. Next: audit medium items or Phase 6 deferred*
+*Last updated: 2026-06-13 — audit backlog high + medium items all fixed (migrations 22 + 23 required); suite at 333 tests. Next: audit low items or Phase 6 deferred*

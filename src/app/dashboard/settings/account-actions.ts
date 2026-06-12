@@ -7,12 +7,17 @@ import { redirect } from "next/navigation";
 import { subtractStorageUsage } from "@/lib/storage-quota";
 import { logAuditEvent } from "@/lib/audit-log";
 import { sendEmailVerification } from "@/lib/email";
+import { hashEmailToken } from "@/lib/email-tokens";
+import { rateLimit, RL_AUTH } from "@/lib/rate-limit";
 
 const GRACE_PERIOD_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 export async function requestEmailChange(newEmail: string) {
   const session = await auth();
   if (!session?.user?.id) return { error: "Not authenticated" };
+
+  const rl = await rateLimit(session.user.id, RL_AUTH);
+  if (!rl.allowed) return { error: `Too many requests. Try again in ${rl.retryAfterSeconds}s.` };
 
   const trimmed = newEmail.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return { error: "Invalid email address" };
@@ -22,7 +27,8 @@ export async function requestEmailChange(newEmail: string) {
   const { data: exists } = await supabase.rpc("email_exists", { p_email: trimmed });
   if (exists) return { error: "That email is already in use" };
 
-  // Generate a 256-bit hex token.
+  // Generate a 256-bit hex token. Only its hash hits the database; the raw
+  // value exists solely inside the verification link we email out.
   const tokenBytes = new Uint8Array(32);
   crypto.getRandomValues(tokenBytes);
   const token = Array.from(tokenBytes)
@@ -34,7 +40,7 @@ export async function requestEmailChange(newEmail: string) {
   const { error: insertError } = await supabase.from("email_change_tokens").insert({
     user_id: session.user.id,
     new_email: trimmed,
-    token,
+    token: hashEmailToken(token),
     expires_at: expiresAt,
   });
   if (insertError) return { error: "Could not create verification token" };

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAuditEvent } from "@/lib/audit-log";
+import { fetchHelixStream } from "@/lib/widgets/twitch";
 
 export const dynamic = "force-dynamic";
 
@@ -70,6 +71,20 @@ export async function POST(request: NextRequest) {
 
   const supabase = createAdminClient();
 
+  // Dedupe — Twitch retries notifications with the same message id. The
+  // primary-key insert is the atomic "first one wins" gate; a duplicate
+  // (23505) means we already processed this message, so just ack it.
+  if (msgId && (msgType === "notification" || msgType === "revocation")) {
+    const { error: dupError } = await supabase
+      .from("twitch_webhook_messages")
+      .insert({ id: msgId });
+    if (dupError && dupError.code === "23505") {
+      return new NextResponse(null, { status: 200 });
+    }
+    // Other insert errors (e.g. table missing): dedupe is best-effort —
+    // proceed rather than dropping a real notification.
+  }
+
   if (msgType === "notification") {
     const subscriptionType = (body as { subscription?: { type?: string } }).subscription?.type;
     const event = (body as { event?: Record<string, unknown> }).event;
@@ -78,13 +93,18 @@ export async function POST(request: NextRequest) {
       const channel = String(event.broadcaster_user_login ?? "").toLowerCase();
       const broadcasterId = String(event.broadcaster_user_id ?? "");
       if (channel) {
+        // The stream.online payload carries no title/game/viewers — fetch a
+        // Helix snapshot now instead of writing empty strings that linger
+        // until the next poll backfills them.
+        const snapshot = await fetchHelixStream(channel).catch(() => null);
         await supabase.from("creator_live_status").upsert({
           channel,
           broadcaster_id: broadcasterId,
           is_live: true,
-          stream_title: String(event.title ?? ""),
-          game_name: String(event.category_name ?? event.game_name ?? ""),
-          started_at: new Date().toISOString(),
+          stream_title: snapshot?.title ?? null,
+          game_name: snapshot?.game_name ?? null,
+          viewer_count: snapshot?.viewer_count ?? null,
+          started_at: snapshot?.started_at ?? String(event.started_at ?? new Date().toISOString()),
           updated_at: new Date().toISOString(),
         });
       }

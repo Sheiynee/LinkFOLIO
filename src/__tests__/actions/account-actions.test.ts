@@ -13,8 +13,13 @@ vi.mock("@/lib/email", () => ({
 vi.mock("@/lib/storage-quota", () => ({
   subtractStorageUsage: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@/lib/rate-limit", () => ({
+  rateLimit: vi.fn().mockResolvedValue({ allowed: true, used: 1, limit: 20, retryAfterSeconds: 0 }),
+  RL_AUTH: { scope: "auth", limit: 20, windowSeconds: 60 },
+}));
 
 import { auth } from "@/auth";
+import { rateLimit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmailVerification } from "@/lib/email";
 import { requestEmailChange } from "@/app/dashboard/settings/account-actions";
@@ -44,6 +49,16 @@ describe("requestEmailChange", () => {
     mockAuth.mockResolvedValue(null);
     expect(await requestEmailChange("new@example.com")).toEqual({
       error: "Not authenticated",
+    });
+  });
+
+  describe("rate limiting", () => {
+    beforeEach(() => mockAuth.mockResolvedValue(SESSION as never));
+
+    it("rejects when the rate limit is exceeded", async () => {
+      vi.mocked(rateLimit).mockResolvedValueOnce({ allowed: false, used: 21, limit: 20, retryAfterSeconds: 30 });
+      const result = await requestEmailChange("new@example.com");
+      expect(result).toEqual({ error: "Too many requests. Try again in 30s." });
     });
   });
 
