@@ -220,6 +220,36 @@ function renormalizeZ(elements: Element[], order: string[]): ZOrderResult {
   return { next: patches.length === 0 ? elements : next, patches };
 }
 
+export const MIN_ZOOM = 0.25;
+export const MAX_ZOOM = 3;
+
+/**
+ * Multiplicative zoom step from a Ctrl+wheel delta. exp() keeps equal wheel
+ * steps feeling uniform in both directions (in then out returns to start).
+ */
+export function nextZoom(prev: number, deltaY: number): number {
+  const z = prev * Math.exp(-deltaY * 0.0015);
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
+}
+
+/**
+ * Scroll offsets that keep the content point under the cursor stationary
+ * across a zoom change. `cursor` is relative to the scroll viewport; scroll
+ * offsets are in scaled-content px.
+ */
+export function computeZoomScroll(
+  prevZoom: number,
+  newZoom: number,
+  cursor: { x: number; y: number },
+  scroll: { left: number; top: number }
+): { left: number; top: number } {
+  const ratio = newZoom / prevZoom;
+  return {
+    left: (scroll.left + cursor.x) * ratio - cursor.x,
+    top: (scroll.top + cursor.y) * ratio - cursor.y,
+  };
+}
+
 /**
  * Resize a (possibly rotated) box from a pointer drag. The screen-space
  * pointer delta is rotated into the element's local frame, applied to the

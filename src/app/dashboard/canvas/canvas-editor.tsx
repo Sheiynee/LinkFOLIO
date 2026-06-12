@@ -12,8 +12,8 @@ import type { Theme } from "@/lib/themes";
 import type { WidgetData } from "@/lib/widgets/types";
 import type { UserFontRecord } from "@/lib/typography";
 import { MOBILE_CANVAS_WIDTH, placementsForMobile } from "@/lib/canvas-mobile";
-import { computeGroupOp, computeNudge, computeZMove, computeZOrder, type CanvasView, type GroupOp, type ZOrderDir } from "@/lib/canvas-ops";
-import { bboxOf, MarqueeBox, SelectionOverlay, SnapGuides, type SelectionBox } from "./canvas-overlay";
+import { computeGroupOp, computeNudge, computeZMove, computeZOrder, computeZoomScroll, nextZoom, type CanvasView, type GroupOp, type ZOrderDir } from "@/lib/canvas-ops";
+import { bboxOf, GapIndicators, MarqueeBox, SelectionOverlay, SnapGuides, type SelectionBox } from "./canvas-overlay";
 import { useCanvasHistory, diffPlacements } from "./canvas-history";
 import { useCanvasGestures } from "./use-canvas-gestures";
 import { InlineTextEditor } from "./inline-text-editor";
@@ -45,6 +45,8 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [scale, setScale] = useState(1);
+  const [zoom, setZoom] = useState(1);
+  const [spaceDown, setSpaceDown] = useState(false);
   const [naturalH, setNaturalH] = useState(900);
   const [, startTransition] = useTransition();
 
@@ -54,10 +56,13 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
   const selectedIdsRef = useRef(selectedIds);
   const viewRef = useRef<CanvasView>(view);
   const clipboardRef = useRef<Element[]>([]);
+  const spaceDownRef = useRef(false);
+  const panRef = useRef<{ pointer: { x: number; y: number }; scroll: { left: number; top: number } } | null>(null);
 
   useEffect(() => { elementsRef.current = elements; }, [elements]);
   useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
   useEffect(() => { viewRef.current = view; }, [view]);
+  useEffect(() => { spaceDownRef.current = spaceDown; }, [spaceDown]);
 
   // Natural width of the rendered canvas (data-canvas-root + horizontal padding
   // from ProfileCanvasRender's outer container).
@@ -83,9 +88,93 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
     return () => ro.disconnect();
   }, [naturalW]);
 
+  // ─── Zoom (Ctrl+wheel, cursor-centered) ───────────────────
+  // Native non-passive listener: React's onWheel can't preventDefault, and
+  // the browser would page-zoom on Ctrl+wheel / trackpad pinch otherwise.
+  useEffect(() => {
+    const outer = scrollOuterRef.current;
+    if (!outer) return;
+    function onWheel(ev: WheelEvent) {
+      if (!ev.ctrlKey && !ev.metaKey) return;
+      ev.preventDefault();
+      setZoom((prev) => {
+        const z = nextZoom(prev, ev.deltaY);
+        if (z === prev) return prev;
+        const rect = outer!.getBoundingClientRect();
+        const s = computeZoomScroll(
+          prev,
+          z,
+          { x: ev.clientX - rect.left, y: ev.clientY - rect.top },
+          { left: outer!.scrollLeft, top: outer!.scrollTop }
+        );
+        // Apply after React lays out the resized canvas, or the browser
+        // clamps the offsets against the old (smaller) scroll extent.
+        requestAnimationFrame(() => {
+          outer!.scrollLeft = s.left;
+          outer!.scrollTop = s.top;
+        });
+        return z;
+      });
+    }
+    outer.addEventListener("wheel", onWheel, { passive: false });
+    return () => outer.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // ─── Pan (hold space + drag) ──────────────────────────────
+  useEffect(() => {
+    function down(ev: KeyboardEvent) {
+      if (ev.code !== "Space") return;
+      const t = ev.target as HTMLElement | null;
+      // Don't steal Space from form controls (it types / activates them).
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "BUTTON" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      ev.preventDefault(); // stop the page from scrolling
+      setSpaceDown(true);
+    }
+    function up(ev: KeyboardEvent) {
+      if (ev.code === "Space") setSpaceDown(false);
+    }
+    function move(ev: PointerEvent) {
+      const p = panRef.current;
+      const outer = scrollOuterRef.current;
+      if (!p || !outer) return;
+      outer.scrollLeft = p.scroll.left - (ev.clientX - p.pointer.x);
+      outer.scrollTop = p.scroll.top - (ev.clientY - p.pointer.y);
+    }
+    function release() {
+      panRef.current = null;
+    }
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", release);
+    window.addEventListener("pointercancel", release);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("pointercancel", release);
+    };
+  }, []);
+
+  /** Space held → drag pans the viewport instead of starting a canvas gesture. */
+  function handleCanvasPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (spaceDownRef.current) {
+      const outer = scrollOuterRef.current;
+      if (!outer) return;
+      e.preventDefault();
+      panRef.current = {
+        pointer: { x: e.clientX, y: e.clientY },
+        scroll: { left: outer.scrollLeft, top: outer.scrollTop },
+      };
+      return;
+    }
+    onPointerDown(e);
+  }
+
   const history = useCanvasHistory(setElements);
 
-  const { onPointerDown, guides, marquee } = useCanvasGestures({
+  const { onPointerDown, guides, gapHints, marquee } = useCanvasGestures({
     canvasRef,
     elementsRef,
     selectedIdsRef,
@@ -435,6 +524,22 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
     });
   }
 
+  /** Drop every element's mobile override — the whole page falls back to auto-reflow. */
+  function resetMobileAll() {
+    const hasOverride = (e: Element) =>
+      e.mobile_x != null || e.mobile_y != null || e.mobile_w != null || e.mobile_h != null;
+    const ids = elementsRef.current.filter(hasOverride).map((e) => e.id);
+    if (ids.length === 0) return;
+    history.push(elementsRef.current);
+    setElements((es) =>
+      es.map((e) => (ids.includes(e.id) ? { ...e, mobile_x: null, mobile_y: null, mobile_w: null, mobile_h: null } : e))
+    );
+    startTransition(async () => {
+      const res = await updateMobilePlacements(ids.map((id) => ({ id, mobile_x: null, mobile_y: null, mobile_w: null, mobile_h: null })));
+      if (res.error) setError(res.error);
+    });
+  }
+
   // ─── Selection metadata for the overlay ──────────────────
   const selectionBox = useMemo<SelectionBox | null>(() => {
     const list = elements.filter((e) => selectedIds.has(e.id));
@@ -511,20 +616,28 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
         <Card className="overflow-hidden">
           <div className="bg-muted px-4 py-2 text-xs font-mono text-muted-foreground border-b flex items-center justify-between">
             <span>Preview · /{profile.username}</span>
-            <span className="text-[10px] uppercase tracking-wide">
-              {view}{scale < 0.999 ? ` · ${Math.round(scale * 100)}%` : ""}
+            <span className="text-[10px] uppercase tracking-wide flex items-center gap-2">
+              <span>{view}</span>
+              <button
+                type="button"
+                className="hover:text-foreground tabular-nums"
+                title="Ctrl+wheel to zoom · hold space to pan · click to reset"
+                onClick={() => setZoom(1)}
+              >
+                {Math.round(scale * zoom * 100)}%
+              </button>
             </span>
           </div>
           <div
             ref={scrollOuterRef}
-            className="overflow-auto"
-            style={{ touchAction: "none" }}
-            onPointerDown={onPointerDown}
+            className="overflow-auto max-h-[80vh]"
+            style={{ touchAction: "none", cursor: spaceDown ? "grab" : undefined }}
+            onPointerDown={handleCanvasPointerDown}
           >
             <div
               style={{
-                width: naturalW * scale,
-                height: Math.max(640, naturalH * scale),
+                width: naturalW * scale * zoom,
+                height: Math.max(640, naturalH * scale * zoom),
                 margin: "0 auto",
                 position: "relative",
               }}
@@ -535,7 +648,7 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
                 style={{
                   width: naturalW,
                   minHeight: 640,
-                  transform: `scale(${scale})`,
+                  transform: `scale(${scale * zoom})`,
                   transformOrigin: "top left",
                   position: "absolute",
                   top: 0,
@@ -561,6 +674,7 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
                         />
                       )}
                       <SnapGuides guides={guides} height={canvasH} />
+                      <GapIndicators gaps={gapHints} />
                       <MarqueeBox box={marquee} />
                       {editingElement && editingPlacement && (
                         <InlineTextEditor
@@ -636,6 +750,7 @@ export function CanvasEditor({ initialElements, profile, theme, widgetData, user
             onDuplicate={() => doDuplicate(Array.from(selectedIds))}
             onDelete={doDeleteSelection}
             onResetMobile={resetMobileForSelection}
+            onResetMobileAll={resetMobileAll}
             onAdded={pushAdded}
             onError={setError}
             onPatchMeta={patchMeta}

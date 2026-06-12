@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { computeNudge, computeGroupOp, computeZOrder, computeZMove, resizeRotatedBox } from "@/lib/canvas-ops";
+import {
+  computeNudge,
+  computeGroupOp,
+  computeZOrder,
+  computeZMove,
+  computeZoomScroll,
+  nextZoom,
+  resizeRotatedBox,
+  MIN_ZOOM,
+  MAX_ZOOM,
+} from "@/lib/canvas-ops";
 import { MOBILE_INSET_TOP, MOBILE_INSET_X } from "@/lib/canvas-mobile";
 import type { Element } from "@/lib/elements";
 
@@ -212,6 +222,43 @@ describe("computeZMove", () => {
     const dense = [el({ id: "a", z: 0 }), el({ id: "b", z: 1 })];
     const r = computeZMove(dense, "nope", 0);
     expect(r.patches).toEqual([]);
+  });
+});
+
+describe("nextZoom", () => {
+  it("wheel up (negative deltaY) zooms in, wheel down zooms out", () => {
+    expect(nextZoom(1, -100)).toBeGreaterThan(1);
+    expect(nextZoom(1, 100)).toBeLessThan(1);
+  });
+
+  it("is multiplicative: equal steps compose symmetrically", () => {
+    const zoomedIn = nextZoom(1, -100);
+    const backOut = nextZoom(zoomedIn, 100);
+    expect(backOut).toBeCloseTo(1, 10);
+  });
+
+  it("clamps to the zoom range", () => {
+    expect(nextZoom(MAX_ZOOM, -1000)).toBe(MAX_ZOOM);
+    expect(nextZoom(MIN_ZOOM, 1000)).toBe(MIN_ZOOM);
+  });
+});
+
+describe("computeZoomScroll", () => {
+  it("keeps the content point under the cursor stationary", () => {
+    const cursor = { x: 150, y: 80 };
+    const scroll = { left: 200, top: 400 };
+    const prevZoom = 1;
+    const newZoom = 2;
+    const s = computeZoomScroll(prevZoom, newZoom, cursor, scroll);
+    // Content coordinate under the cursor before and after must match.
+    const before = { x: (scroll.left + cursor.x) / prevZoom, y: (scroll.top + cursor.y) / prevZoom };
+    const after = { x: (s.left + cursor.x) / newZoom, y: (s.top + cursor.y) / newZoom };
+    expect(after.x).toBeCloseTo(before.x);
+    expect(after.y).toBeCloseTo(before.y);
+  });
+
+  it("zoom at the origin with no scroll stays at the origin", () => {
+    expect(computeZoomScroll(1, 2, { x: 0, y: 0 }, { left: 0, top: 0 })).toEqual({ left: 0, top: 0 });
   });
 });
 

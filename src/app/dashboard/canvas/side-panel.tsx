@@ -49,7 +49,7 @@ export function HelperBar({ selectionCount, view }: { selectionCount: number; vi
     selectionCount === 0
       ? view === "mobile"
         ? "Mobile preview · drag a widget to set mobile-specific positions, or hit Reset in the sidebar to fall back to auto-reflow."
-        : "Click an element to select · drag empty space to marquee-select · add new elements from the sidebar →"
+        : "Click an element to select · drag empty space to marquee-select · Ctrl+wheel zooms · hold space to pan · add elements from the sidebar →"
       : selectionCount === 1
         ? "Drag to move · handles resize · the dot above rotates · arrows nudge (shift = 10px) · double-click text to edit in place."
         : `${selectionCount} selected · use the align/distribute buttons in the sidebar or drag the group together.`;
@@ -181,6 +181,7 @@ export interface SidePanelProps {
   onDuplicate: () => void;
   onDelete: () => void;
   onResetMobile: () => void;
+  onResetMobileAll: () => void;
   onAdded: (el: Element) => void;
   onError: (msg: string) => void;
   onPatchMeta: (id: string, patch: Record<string, unknown>) => void;
@@ -211,6 +212,7 @@ export function SidePanel({
   onDuplicate,
   onDelete,
   onResetMobile,
+  onResetMobileAll,
   onAdded,
   onError,
   onPatchMeta,
@@ -422,6 +424,18 @@ export function SidePanel({
               <Smartphone className="h-4 w-4 mr-1" /> Mobile
             </Button>
           </ClusterRow>
+          {view === "mobile" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onResetMobileAll}
+              className="w-full h-7 text-xs"
+              title="Clear every element's mobile override and fall back to auto-reflow"
+            >
+              <Smartphone className="h-3.5 w-3.5 mr-1" /> Reset all mobile overrides
+            </Button>
+          )}
         </div>
       </div>
 
@@ -691,6 +705,8 @@ export function SidePanel({
             <Shortcut keys={["Delete"]} label="Remove selection" />
             <Shortcut keys={["Shift", "+", "click"]} label="Toggle in selection" />
             <Shortcut keys={["2×", "click"]} label="Edit text in place" />
+            <Shortcut keys={[mod, "+", "wheel"]} label="Zoom (cursor-centered)" />
+            <Shortcut keys={["Space", "+", "drag"]} label="Pan the canvas" />
             <Shortcut keys={["Shift", "+", "drag rotate"]} label="Snap to 15°" />
           </div>
         )}

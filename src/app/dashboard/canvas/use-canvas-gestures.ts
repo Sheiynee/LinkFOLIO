@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react";
 import type { Element } from "@/lib/elements";
 import { CANVAS_WIDTH, MIN_ELEMENT_H, MIN_ELEMENT_W } from "@/lib/elements";
-import { snap, type SnapGuide } from "@/lib/canvas-snap";
+import { snap, type GapHint, type SnapGuide } from "@/lib/canvas-snap";
 import { MOBILE_CANVAS_WIDTH, placementsForMobile } from "@/lib/canvas-mobile";
 import { resizeRotatedBox, type CanvasView } from "@/lib/canvas-ops";
 import type { HandleId, SelectionBox } from "./canvas-overlay";
@@ -49,6 +49,7 @@ export function useCanvasGestures({
   onDoubleClickElement,
 }: CanvasGestureDeps) {
   const [guides, setGuides] = useState<SnapGuide[]>([]);
+  const [gapHints, setGapHints] = useState<GapHint[]>([]);
   const [marquee, setMarquee] = useState<SelectionBox | null>(null);
   const [, startTransition] = useTransition();
 
@@ -282,6 +283,7 @@ export function useCanvasGestures({
         const snapDX = snapped.box.x - startPrimary.x;
         const snapDY = snapped.box.y - startPrimary.y;
         setGuides(snapped.guides);
+        setGapHints(snapped.gaps);
 
         setElements((es) =>
           es.map((e) => {
@@ -361,6 +363,7 @@ export function useCanvasGestures({
       const g = gestureRef.current;
       if (!g) return;
       setGuides([]);
+      setGapHints([]);
       setMarquee(null);
       if (g.type !== "marquee" && g.moved) {
         // Commit a history snapshot for this gesture.
@@ -402,5 +405,5 @@ export function useCanvasGestures({
     };
   }, [canvasMetrics, elementsRef, patchLocal, pushHistory, queueSave, setElements, setError, setSelectedIds, viewRef]);
 
-  return { onPointerDown, guides, marquee };
+  return { onPointerDown, guides, gapHints, marquee };
 }

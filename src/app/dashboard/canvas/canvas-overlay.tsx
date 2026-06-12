@@ -1,7 +1,7 @@
 "use client";
 
 import type { Element } from "@/lib/elements";
-import type { SnapGuide } from "@/lib/canvas-snap";
+import type { GapHint, SnapGuide } from "@/lib/canvas-snap";
 
 /** Bounding box of a selection set in canvas coordinates. */
 export interface SelectionBox {
@@ -158,6 +158,69 @@ export function SnapGuides({ guides, height }: { guides: SnapGuide[]; height: nu
           }
         />
       ))}
+    </>
+  );
+}
+
+const GAP_COLOR = "rgba(244,63,94,0.9)"; // rose-500 — distinct from the blue edge guides
+
+/**
+ * Figma-style equal-spacing hints: a bar with end ticks across each equal
+ * gap, plus the gap size in px.
+ */
+export function GapIndicators({ gaps }: { gaps: GapHint[] }) {
+  return (
+    <>
+      {gaps.map((g, i) => {
+        const size = Math.round(g.to - g.from);
+        const horizontal = g.axis === "x";
+        return (
+          <div
+            key={i}
+            aria-hidden
+            className="absolute pointer-events-none"
+            style={
+              horizontal
+                ? { left: g.from, top: g.cross - 4, width: g.to - g.from, height: 9 }
+                : { left: g.cross - 4, top: g.from, width: 9, height: g.to - g.from }
+            }
+          >
+            {/* bar */}
+            <div
+              className="absolute"
+              style={
+                horizontal
+                  ? { left: 0, right: 0, top: 4, height: 1, background: GAP_COLOR }
+                  : { top: 0, bottom: 0, left: 4, width: 1, background: GAP_COLOR }
+              }
+            />
+            {/* end ticks */}
+            {([0, 1] as const).map((end) => (
+              <div
+                key={end}
+                className="absolute"
+                style={
+                  horizontal
+                    ? { [end === 0 ? "left" : "right"]: 0, top: 0, width: 1, height: 9, background: GAP_COLOR }
+                    : { [end === 0 ? "top" : "bottom"]: 0, left: 0, height: 1, width: 9, background: GAP_COLOR }
+                }
+              />
+            ))}
+            <span
+              className="absolute text-[9px] font-mono leading-none px-0.5 rounded-sm"
+              style={{
+                background: GAP_COLOR,
+                color: "white",
+                left: "50%",
+                top: "50%",
+                transform: horizontal ? "translate(-50%, 4px)" : "translate(6px, -50%)",
+              }}
+            >
+              {size}
+            </span>
+          </div>
+        );
+      })}
     </>
   );
 }

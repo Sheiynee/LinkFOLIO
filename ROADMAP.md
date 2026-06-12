@@ -168,11 +168,11 @@ Benchmarked against Carrd (click-to-edit immediacy), Odoo's website builder (gri
 - [x] Inline text editing: double-click a text/heading element to edit it in place — double-pointerdown detection lives in the gesture layer (`onDoubleClickElement` dep); the textarea renders as an editor-side overlay (`inline-text-editor.tsx`, like the selection overlay) so the shared server/client `ProfileCanvasRender` stays hook-free. Commits on blur / Ctrl+Enter, Escape cancels; works in both desktop and mobile views and on rotated elements
 - [x] Layers panel: sidebar element list, top-most first — click-to-select (shift toggles), drag-to-reorder z (HTML5 DnD backed by pure `computeZMove`, which renormalizes z like `computeZOrder`; 8 tests), per-row lock/visibility toggles (selection-cluster toggles generalized to `toggleLockFor`/`toggleVisibleFor`). Suite now 304 passing
 
-### Step 4 — Polish tier
-- [ ] Zoom (Ctrl+wheel, cursor-centered) and pan (space-drag)
-- [ ] Equal-spacing smart guides (Figma-style "evenly spaced" hints)
-- [ ] Smarter mobile auto-reflow: preserve aspect ratio / scale proportionally instead of forcing every element full-width at desktop height
-- [ ] "Reset all mobile overrides" action (currently per-selection only)
+### Step 4 — Polish tier ✅ (2026-06-13)
+- [x] Zoom (Ctrl+wheel / pinch, cursor-centered, 25–300%, click the % readout to reset) and pan (space-drag) — pure `nextZoom` + `computeZoomScroll` helpers keep the content point under the cursor stationary (5 tests); zoom multiplies the existing fit-to-viewport scale so gesture pointer math needs no changes
+- [x] Equal-spacing smart guides — `snap()` now returns `gaps: GapHint[]`; when no edge snap engages, `equalSpacing` finds repeat-after / repeat-before / center-between candidates among band-overlapping neighbors (7 tests); rendered as rose gap bars with px labels (`GapIndicators`)
+- [x] Smarter mobile auto-reflow — visual elements (shape, sticker, image, region) now scale proportionally to fit the content width and center, instead of stretching full-width at desktop height; text-flow elements unchanged (5 new tests)
+- [x] "Reset all mobile overrides" button in mobile view — clears every element's `mobile_*` columns in one batch. Suite now 321 passing
 
 ### Twitch EventSub (Phase 6 shipped)
 - `/api/webhooks/twitch` — HMAC-SHA256 verified, replay-guarded webhook endpoint
@@ -518,4 +518,4 @@ Findings from a codebase + live-site audit, verified in code. Not yet fixed — 
 
 ---
 
-*Last updated: 2026-06-12 — canvas refinement Step 3 shipped: inline text editing + layers panel; suite at 304 tests*
+*Last updated: 2026-06-13 — canvas refinement Step 4 shipped: zoom/pan, equal-spacing guides, proportional mobile reflow, reset-all-mobile; suite at 321 tests. Canvas refinement plan complete — next: audit backlog (high items) or Phase 6 deferred*
