@@ -33,7 +33,7 @@ export function YouTubeChannelWidget({
         icon={
           channel?.thumbnail_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={channel.thumbnail_url} alt={channel.title} className="h-6 w-6 rounded-full object-cover" />
+            <img loading="lazy" decoding="async" src={channel.thumbnail_url} alt={channel.title} className="h-6 w-6 rounded-full object-cover" />
           ) : null
         }
         title={channel?.title ?? "YouTube channel"}
@@ -61,7 +61,7 @@ export function YouTubeChannelWidget({
       <div className={`flex items-center gap-3 ${isFeatured ? "p-4" : "p-3"}`}>
         {channel?.thumbnail_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <img loading="lazy" decoding="async"
             src={channel.thumbnail_url}
             alt={channel.title}
             className={`${isFeatured ? "h-20 w-20" : "h-12 w-12"} rounded-full object-cover shrink-0`}
@@ -91,7 +91,7 @@ export function YouTubeChannelWidget({
           </div>
           {channel ? (
             <p className="text-xs" style={{ color: theme.muted_color }}>
-              {formatCount(channel.subscriber_count)} subscribers · {formatCount(channel.video_count)} videos
+              {formatCount(channel.subscriber_count)} subscribers Â· {formatCount(channel.video_count)} videos
             </p>
           ) : (
             <p className="text-xs" style={{ color: theme.muted_color }}>

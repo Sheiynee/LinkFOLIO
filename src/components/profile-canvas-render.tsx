@@ -421,6 +421,8 @@ function ImageElement({ element }: { element: Element }) {
       <img
         src={meta.url}
         alt=""
+        loading="lazy"
+        decoding="async"
         className="w-full h-full"
         style={{
           objectFit: meta.fit,

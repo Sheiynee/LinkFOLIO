@@ -10,7 +10,7 @@ function RatingStars({ rating }: { rating: number }) {
   const half = rating % 1 >= 0.5;
   return (
     <span style={{ color: LBX_ORANGE, fontSize: "0.7rem" }}>
-      {"★".repeat(full)}{half ? "½" : ""}
+      {"â˜…".repeat(full)}{half ? "Â½" : ""}
     </span>
   );
 }
@@ -73,7 +73,7 @@ export function LetterboxdFilmsWidget({
               <div key={i} className="flex flex-col gap-1">
                 {film.poster_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={film.poster_url} alt={film.title} className="w-full rounded aspect-[2/3] object-cover" />
+                  <img loading="lazy" decoding="async" src={film.poster_url} alt={film.title} className="w-full rounded aspect-[2/3] object-cover" />
                 ) : (
                   <div className="w-full rounded aspect-[2/3] flex items-center justify-center text-xs font-bold"
                     style={{ background: "#14181c", color: LBX_GREEN }}>
@@ -107,7 +107,7 @@ export function LetterboxdFilmsWidget({
       <div className="flex gap-3 p-3">
         {topFilm?.poster_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={topFilm.poster_url} alt={topFilm.title}
+          <img loading="lazy" decoding="async" src={topFilm.poster_url} alt={topFilm.title}
             className="h-20 w-14 rounded-lg object-cover shrink-0" />
         ) : (
           <div className="h-20 w-14 rounded-lg shrink-0 flex items-center justify-center text-lg font-bold"
@@ -130,7 +130,7 @@ export function LetterboxdFilmsWidget({
             <p className="text-xs" style={{ color: theme.muted_color }}>{topFilm.watched_date}</p>
           )}
           <p className="text-xs mt-auto" style={{ color: theme.muted_color }}>
-            {username} · letterboxd
+            {username} Â· letterboxd
           </p>
         </div>
       </div>

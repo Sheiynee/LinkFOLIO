@@ -27,7 +27,7 @@ export function DiscordInviteWidget({
         icon={
           guild?.icon_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={guild.icon_url} alt={guild.name} className="h-6 w-6 rounded-md object-cover" />
+            <img loading="lazy" decoding="async" src={guild.icon_url} alt={guild.name} className="h-6 w-6 rounded-md object-cover" />
           ) : (
             <span className="inline-block h-6 w-6 rounded-md" style={{ background: "#5865F2" }} />
           )
@@ -55,7 +55,7 @@ export function DiscordInviteWidget({
       <div className="flex items-center gap-3 p-3">
         {guild?.icon_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <img loading="lazy" decoding="async"
             src={guild.icon_url}
             alt={guild.name}
             className="h-12 w-12 rounded-2xl object-cover shrink-0"
@@ -94,7 +94,7 @@ export function DiscordInviteWidget({
                 </span>
               )}
               {data.approximate_member_count != null && (
-                <span>· {formatCount(data.approximate_member_count)} members</span>
+                <span>Â· {formatCount(data.approximate_member_count)} members</span>
               )}
             </div>
           ) : (

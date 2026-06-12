@@ -262,16 +262,13 @@ export async function reorderBlocks(orderedIds: string[]) {
   if (!session?.user?.id) return { error: "Not authenticated" };
 
   const supabase = createAdminClient();
-  const updates = orderedIds.map((id, index) =>
-    supabase
-      .from("blocks")
-      .update({ position: index })
-      .eq("id", id)
-      .eq("user_id", session.user.id!)
-  );
-  const results = await Promise.all(updates);
-  const failed = results.find((r) => r.error);
-  if (failed?.error) return { error: failed.error.message };
+  // One atomic statement (`reorder_blocks` RPC, migration 24) — the old
+  // per-block updates were N round trips and could fail half-applied.
+  const { error: rpcError } = await supabase.rpc("reorder_blocks", {
+    p_user_id: session.user.id,
+    p_ids: orderedIds,
+  });
+  if (rpcError) return { error: rpcError.message };
 
   revalidatePath("/dashboard/content");
   revalidatePath("/dashboard");

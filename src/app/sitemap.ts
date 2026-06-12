@@ -1,11 +1,8 @@
 import type { MetadataRoute } from "next";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { siteBaseUrl } from "@/lib/site-url";
 
-const siteBase =
-  process.env.NEXT_PUBLIC_SITE_URL ??
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL
-    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-    : "http://localhost:3000");
+const siteBase = siteBaseUrl();
 
 /**
  * Sitemap covers the landing page, legal pages, and every active creator

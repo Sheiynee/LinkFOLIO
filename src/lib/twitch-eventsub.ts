@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { productionSiteUrl } from "@/lib/site-url";
 
 const HELIX = "https://api.twitch.tv/helix";
 
@@ -65,10 +66,8 @@ export async function ensureChannelSubscriptions(channel: string): Promise<void>
 
   const clientId = process.env.TWITCH_CLIENT_ID;
   const secret = process.env.TWITCH_EVENTSUB_SECRET;
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ??
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-      : null);
+  // Webhook callbacks must point at a real public origin — never localhost.
+  const siteUrl = productionSiteUrl();
 
   if (!clientId || !secret || !siteUrl) return;
 

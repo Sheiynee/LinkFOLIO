@@ -50,7 +50,7 @@ export function OgCardWidget({
     >
       {data?.image_url && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <img loading="lazy" decoding="async"
           src={data.image_url}
           alt={data.title ?? host}
           className="w-full aspect-[1200/630] object-cover"

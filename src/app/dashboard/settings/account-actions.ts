@@ -8,6 +8,7 @@ import { subtractStorageUsage } from "@/lib/storage-quota";
 import { logAuditEvent } from "@/lib/audit-log";
 import { sendEmailVerification } from "@/lib/email";
 import { hashEmailToken } from "@/lib/email-tokens";
+import { siteBaseUrl } from "@/lib/site-url";
 import { rateLimit, RL_AUTH } from "@/lib/rate-limit";
 
 const GRACE_PERIOD_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -45,12 +46,7 @@ export async function requestEmailChange(newEmail: string) {
   });
   if (insertError) return { error: "Could not create verification token" };
 
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ??
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-      : "http://localhost:3000");
-  const verifyUrl = `${siteUrl}/api/account/verify-email?token=${token}`;
+  const verifyUrl = `${siteBaseUrl()}/api/account/verify-email?token=${token}`;
 
   try {
     await sendEmailVerification(trimmed, verifyUrl);

@@ -116,7 +116,13 @@ export async function GET(
           </div>
         </div>
       ),
-      SIZE
+      {
+        ...SIZE,
+        // Story cards have no live data — cache a bit longer at the CDN.
+        headers: {
+          "Cache-Control": "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400",
+        },
+      }
     );
   } catch (err) {
     console.error("[og/story]", err);

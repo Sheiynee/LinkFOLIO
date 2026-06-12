@@ -50,7 +50,7 @@ export function YouTubeVideoWidget({
     >
       {video?.thumbnail_url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <img loading="lazy" decoding="async"
           src={video.thumbnail_url}
           alt={video.title}
           className="w-full aspect-video object-cover"
@@ -80,7 +80,7 @@ export function YouTubeVideoWidget({
           )}
           {video?.published_at && (
             <span className="text-xs" style={{ color: theme.muted_color }}>
-              · {timeAgo(video.published_at)}
+              Â· {timeAgo(video.published_at)}
             </span>
           )}
         </div>

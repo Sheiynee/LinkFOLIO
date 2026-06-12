@@ -70,7 +70,7 @@ export function TwitchLiveWidget({
     >
       {isFeatured && live && liveThumb && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <img loading="lazy" decoding="async"
           src={liveThumb}
           alt={live.title}
           className="w-full aspect-video object-cover"
@@ -79,7 +79,7 @@ export function TwitchLiveWidget({
       <div className="flex items-center gap-3 p-3">
         {user?.profile_image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <img loading="lazy" decoding="async"
             src={user.profile_image_url}
             alt={user.display_name}
             className={`${isFeatured ? "h-16 w-16" : "h-12 w-12"} rounded-full object-cover shrink-0`}
@@ -109,7 +109,7 @@ export function TwitchLiveWidget({
                   Live
                 </span>
                 <span className="text-xs" style={{ color: theme.muted_color }}>
-                  · {formatViewers(live.viewer_count)} viewers
+                  Â· {formatViewers(live.viewer_count)} viewers
                 </span>
               </div>
               <p className={`${isFeatured ? "text-base" : "text-sm"} ${isFeatured ? "" : "truncate"}`} style={{ color: theme.text_color }}>

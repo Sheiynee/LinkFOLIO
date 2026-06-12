@@ -15,6 +15,7 @@ import { BLOCK_LABELS } from "@/lib/blocks";
 import { OnboardingChecklist } from "./onboarding-checklist";
 import { ShareButton } from "@/components/share-button";
 import { StoryShareButton } from "@/components/story-share-button";
+import { siteBaseUrl } from "@/lib/site-url";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -23,12 +24,7 @@ export default async function DashboardPage() {
   const profile = await getProfileById(session.user.id);
   if (!profile) redirect("/auth/signin");
 
-  const siteBase =
-    process.env.NEXT_PUBLIC_SITE_URL ??
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-      : "http://localhost:3000");
-  const absolutePublicUrl = `${siteBase.replace(/\/$/, "")}/${profile.username}`;
+  const absolutePublicUrl = `${siteBaseUrl()}/${profile.username}`;
 
   const supabase = createAdminClient();
   const [blockList, viewsRes, clicksRes] = await Promise.all([
@@ -57,16 +53,16 @@ export default async function DashboardPage() {
 
   return (
     <main className="min-h-screen bg-background">
-      <header className="border-b px-6 py-3 flex items-center justify-between">
+      <header className="border-b px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-y-2">
         <span className="font-bold text-lg">LinkFolio</span>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3">
           <Link
             href={`/${profile.username}`}
             className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
             target="_blank"
           >
             <ExternalLink className="h-4 w-4" />
-            View page
+            <span className="hidden sm:inline">View page</span>
           </Link>
           <ShareButton url={absolutePublicUrl} label={`@${profile.username} on LinkFolio`} />
           <StoryShareButton username={profile.username} />

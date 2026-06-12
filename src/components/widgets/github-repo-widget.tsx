@@ -24,7 +24,7 @@ export function GitHubRepoWidget({
         preview={preview}
         theme={theme}
         title={data?.full_name ?? "GitHub repo"}
-        trailing={data ? `★ ${formatCount(data.stargazers_count)}` : null}
+        trailing={data ? `â˜… ${formatCount(data.stargazers_count)}` : null}
         tag="github"
       />
     );
@@ -47,7 +47,7 @@ export function GitHubRepoWidget({
         <div className="flex items-center gap-2">
           {data?.owner.avatar_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <img loading="lazy" decoding="async"
               src={data.owner.avatar_url}
               alt={data.owner.login}
               className="h-6 w-6 rounded-full shrink-0"
@@ -74,9 +74,9 @@ export function GitHubRepoWidget({
         )}
         {data && (
           <div className="flex items-center gap-3 text-xs" style={{ color: theme.muted_color }}>
-            <span>★ {formatCount(data.stargazers_count)}</span>
-            <span>⑂ {formatCount(data.forks_count)}</span>
-            {data.language && <span>● {data.language}</span>}
+            <span>â˜… {formatCount(data.stargazers_count)}</span>
+            <span>â‘‚ {formatCount(data.forks_count)}</span>
+            {data.language && <span>â— {data.language}</span>}
           </div>
         )}
       </div>

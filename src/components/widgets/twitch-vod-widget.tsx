@@ -28,9 +28,9 @@ export function TwitchVodWidget({
         href={href}
         preview={preview}
         theme={theme}
-        title={vod?.title ?? `${user?.display_name ?? channel} — latest VOD`}
+        title={vod?.title ?? `${user?.display_name ?? channel} â€” latest VOD`}
         trailing={vod ? `${formatCount(vod.view_count)}` : null}
-        tag="twitch · vod"
+        tag="twitch Â· vod"
       />
     );
   }
@@ -50,7 +50,7 @@ export function TwitchVodWidget({
     >
       {vod?.thumbnail_url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <img loading="lazy" decoding="async"
           src={vod.thumbnail_url}
           alt={vod.title}
           className="w-full aspect-video object-cover"
@@ -71,7 +71,7 @@ export function TwitchVodWidget({
               border: `1px solid ${theme.button_border}`,
             }}
           >
-            twitch · vod
+            twitch Â· vod
           </span>
           {vod && (
             <>
@@ -79,7 +79,7 @@ export function TwitchVodWidget({
                 {formatCount(vod.view_count)} views
               </span>
               <span className="text-xs" style={{ color: theme.muted_color }}>
-                · {timeAgo(vod.published_at)}
+                Â· {timeAgo(vod.published_at)}
               </span>
             </>
           )}

@@ -26,7 +26,7 @@ export function GitHubUserWidget({
         icon={
           data?.avatar_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={data.avatar_url} alt={data.login} className="h-6 w-6 rounded-full object-cover" />
+            <img loading="lazy" decoding="async" src={data.avatar_url} alt={data.login} className="h-6 w-6 rounded-full object-cover" />
           ) : null
         }
         title={data?.name ?? data?.login ?? "GitHub user"}
@@ -52,7 +52,7 @@ export function GitHubUserWidget({
       <div className="flex items-center gap-3 p-3">
         {data?.avatar_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <img loading="lazy" decoding="async"
             src={data.avatar_url}
             alt={data.login}
             className="h-12 w-12 rounded-full object-cover shrink-0"
@@ -87,7 +87,7 @@ export function GitHubUserWidget({
           ) : null}
           {data && (
             <p className="text-xs" style={{ color: theme.muted_color }}>
-              {formatCount(data.followers)} followers · {formatCount(data.public_repos)} repos
+              {formatCount(data.followers)} followers Â· {formatCount(data.public_repos)} repos
             </p>
           )}
         </div>

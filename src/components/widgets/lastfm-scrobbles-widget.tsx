@@ -30,12 +30,12 @@ export function LastFmScrobblesWidget({
         icon={
           topTrack?.image_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={topTrack.image_url} alt={topTrack.name} className="h-6 w-6 rounded object-cover" />
+            <img loading="lazy" decoding="async" src={topTrack.image_url} alt={topTrack.name} className="h-6 w-6 rounded object-cover" />
           ) : (
-            <span className="inline-flex h-6 w-6 rounded items-center justify-center text-xs font-bold" style={{ background: LASTFM_RED, color: "#fff" }}>♫</span>
+            <span className="inline-flex h-6 w-6 rounded items-center justify-center text-xs font-bold" style={{ background: LASTFM_RED, color: "#fff" }}>â™«</span>
           )
         }
-        title={topTrack ? `${topTrack.artist} — ${topTrack.name}` : `${username} on Last.fm`}
+        title={topTrack ? `${topTrack.artist} â€” ${topTrack.name}` : `${username} on Last.fm`}
         trailing={isNowPlaying ? "now playing" : null}
         tag="last.fm"
       />
@@ -54,7 +54,7 @@ export function LastFmScrobblesWidget({
       {/* Header */}
       <div className="flex items-center gap-2 px-3 pt-3 pb-2">
         <span className="text-xs font-bold uppercase tracking-wider" style={{ color: LASTFM_RED }}>
-          {isNowPlaying ? "▶ Now playing" : "Recently scrobbled"}
+          {isNowPlaying ? "â–¶ Now playing" : "Recently scrobbled"}
         </span>
         <span className="ml-auto text-[10px] uppercase tracking-wide" style={{ color: theme.muted_color }}>
           last.fm
@@ -69,9 +69,9 @@ export function LastFmScrobblesWidget({
               <div key={i} className="flex items-center gap-3 px-3 py-2">
                 {track.image_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={track.image_url} alt={track.name} className="h-10 w-10 rounded object-cover shrink-0" />
+                  <img loading="lazy" decoding="async" src={track.image_url} alt={track.name} className="h-10 w-10 rounded object-cover shrink-0" />
                 ) : (
-                  <div className="h-10 w-10 rounded shrink-0 flex items-center justify-center text-sm" style={{ background: LASTFM_RED, color: "#fff" }}>♫</div>
+                  <div className="h-10 w-10 rounded shrink-0 flex items-center justify-center text-sm" style={{ background: LASTFM_RED, color: "#fff" }}>â™«</div>
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium truncate">{track.name}</p>
@@ -93,9 +93,9 @@ export function LastFmScrobblesWidget({
         <div className="flex items-center gap-3 px-3 pb-3">
           {topTrack?.image_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={topTrack.image_url} alt={topTrack.name} className="h-14 w-14 rounded-lg object-cover shrink-0" />
+            <img loading="lazy" decoding="async" src={topTrack.image_url} alt={topTrack.name} className="h-14 w-14 rounded-lg object-cover shrink-0" />
           ) : (
-            <div className="h-14 w-14 rounded-lg shrink-0 flex items-center justify-center text-2xl" style={{ background: LASTFM_RED, color: "#fff" }}>♫</div>
+            <div className="h-14 w-14 rounded-lg shrink-0 flex items-center justify-center text-2xl" style={{ background: LASTFM_RED, color: "#fff" }}>â™«</div>
           )}
           <div className="min-w-0 flex-1">
             <p className="font-semibold truncate">{topTrack?.name ?? "No recent tracks"}</p>

@@ -32,7 +32,7 @@ export function SteamProfileWidget({
         icon={
           data?.avatar_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={data.avatar_url} alt={data.username} className="h-6 w-6 rounded object-cover" />
+            <img loading="lazy" decoding="async" src={data.avatar_url} alt={data.username} className="h-6 w-6 rounded object-cover" />
           ) : (
             <span className="inline-block h-6 w-6 rounded" style={{ background: "#1b2838" }} />
           )
@@ -57,7 +57,7 @@ export function SteamProfileWidget({
       <div className="flex items-center gap-3 p-3">
         {data?.avatar_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={data.avatar_url} alt={data.username} className="h-12 w-12 rounded-lg object-cover shrink-0" />
+          <img loading="lazy" decoding="async" src={data.avatar_url} alt={data.username} className="h-12 w-12 rounded-lg object-cover shrink-0" />
         ) : (
           <div className="h-12 w-12 rounded-lg shrink-0" style={{ background: "#1b2838" }} />
         )}
@@ -84,7 +84,7 @@ export function SteamProfileWidget({
         </div>
       </div>
 
-      {/* Recent games — only in featured or when there's data and space */}
+      {/* Recent games â€” only in featured or when there's data and space */}
       {data && data.recent_games.length > 0 && size === "featured" && (
         <div className="border-t px-3 pb-3 pt-2" style={{ borderColor: theme.button_border }}>
           <p className="text-[10px] uppercase tracking-wide mb-2" style={{ color: theme.muted_color }}>
@@ -95,7 +95,7 @@ export function SteamProfileWidget({
               <div key={g.appid} className="flex items-center gap-2">
                 {g.icon_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={g.icon_url} alt={g.name} className="h-5 w-5 rounded shrink-0" />
+                  <img loading="lazy" decoding="async" src={g.icon_url} alt={g.name} className="h-5 w-5 rounded shrink-0" />
                 ) : (
                   <div className="h-5 w-5 rounded shrink-0" style={{ background: "#1b2838" }} />
                 )}
@@ -116,7 +116,7 @@ export function SteamProfileWidget({
         <div className="border-t px-3 py-2 flex items-center gap-2" style={{ borderColor: theme.button_border }}>
           {data.recent_games[0].icon_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={data.recent_games[0].icon_url} alt={data.recent_games[0].name} className="h-4 w-4 rounded shrink-0" />
+            <img loading="lazy" decoding="async" src={data.recent_games[0].icon_url} alt={data.recent_games[0].name} className="h-4 w-4 rounded shrink-0" />
           ) : null}
           <span className="text-xs truncate" style={{ color: theme.muted_color }}>
             Recently played: {data.recent_games[0].name}

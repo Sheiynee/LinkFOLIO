@@ -473,13 +473,14 @@ Stack: Stripe Checkout + Customer Portal, webhooks → `subscriptions` table, `e
 | 21 | `21_new_widget_kinds_2.sql` | Widens both widget_kind constraints with `'lastfm_scrobbles'`, `'steam_profile'`, `'letterboxd_films'` |
 | 22 | `22_analytics_click_stats.sql` | `get_click_stats()` RPC — Postgres-side click aggregation (audit fix #3) |
 | 23 | `23_rate_limit_rpc_and_webhook_dedupe.sql` | `rate_limit_hit()` atomic RPC + `twitch_webhook_messages` dedupe table (audit fixes #5, #6) |
+| 24 | `24_reorder_blocks_rpc.sql` | `reorder_blocks()` RPC — atomic single-statement block reorder (audit low item) |
 
 ### Planned migrations
 
 | # | Purpose | Phase |
 |---|---|---|
-| 24 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 (deferred) |
-| 25 | `domains`: custom domain verification | 7 |
+| 25 | `live_alert_subscriptions`: viewer email opt-in for go-live notifications | 6 (deferred) |
+| 26 | `domains`: custom domain verification | 7 |
 
 Run migrations in order in Supabase SQL Editor. Each is idempotent.
 
@@ -503,8 +504,16 @@ Findings from a codebase + live-site audit, verified in code. Not yet fixed — 
 9. ~~Storage quota only grows~~ — `cleanupReplacedUploads` removes superseded `avatar-*` files on replace and unreferenced `bg-*` files older than 24h (theme-JSON reference check), subtracting reclaimed bytes
 10. ~~Small security trio~~ — CSV cells starting with `= + - @ \t \r` get an apostrophe guard; cron secret compare is constant-time (`verifyCronSecret`, sha256 + `timingSafeEqual`); email-change tokens stored as sha256 hashes + `requestEmailChange` rate-limited (RL_AUTH)
 
-### Low
-- Widget `<img>` tags lack `loading="lazy"` + dimensions (CLS); OG image routes lack `Cache-Control`; `block-list.tsx` is 838 lines; `theme/actions.ts` still has a private `getUsernameForUser` (refactor #5 regression); `siteBase` derivation duplicated 4×; `reorderBlocks` fires N non-transactional updates; dashboard header overflows under ~400px
+### Low — ✅ all fixed (2026-06-13)
+- ~~Widget `<img>` lazy-loading~~ — all 22 widget images + canvas image elements get `loading="lazy" decoding="async"` (sizes already fixed via h-/w-/aspect classes)
+- ~~OG `Cache-Control`~~ — share card: `s-maxage=300` (LIVE badge must stay fresh); story card: `s-maxage=3600, swr=86400`
+- ~~`block-list.tsx` 838 lines~~ — split into `block-list.tsx` (list state, ~290), `block-row.tsx` (sortable row + size toggle), `add-block-forms.tsx` (picker + forms), `block-meta.ts` (labels/icons/subtitle helpers)
+- ~~`getUsernameForUser` regression~~ — theme actions use the shared `revalidatePublicPage`
+- ~~`siteBase` duplicated~~ — actually 7 copies; all use `lib/site-url.ts` (`siteBaseUrl()` + `productionSiteUrl()` for the Twitch-webhook no-localhost case)
+- ~~`reorderBlocks` N updates~~ — single atomic `reorder_blocks(p_user_id, p_ids)` RPC (migration 24)
+- ~~Dashboard header overflow~~ — wraps with tighter gaps; "View page" label hides below `sm`
+
+**Audit backlog fully cleared** — all high, medium, and low findings from the 2026-06-11 scan are fixed.
 
 ---
 
@@ -520,4 +529,4 @@ Findings from a codebase + live-site audit, verified in code. Not yet fixed — 
 
 ---
 
-*Last updated: 2026-06-13 — audit backlog high + medium items all fixed (migrations 22 + 23 required); suite at 333 tests. Next: audit low items or Phase 6 deferred*
+*Last updated: 2026-06-13 — audit backlog FULLY cleared (high + medium + low; migrations 22–24 required); suite at 333 tests. Next: Phase 6 deferred (2FA/passkeys, email features) or Phase 7*

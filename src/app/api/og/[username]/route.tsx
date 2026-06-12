@@ -252,7 +252,14 @@ export async function GET(
           </div>
         </div>
       ),
-      SIZE
+      {
+        ...SIZE,
+        // CDN-cache the rendered card; short s-maxage because the LIVE badge
+        // must update within minutes of a stream starting or ending.
+        headers: {
+          "Cache-Control": "public, max-age=0, s-maxage=300, stale-while-revalidate=600",
+        },
+      }
     );
   } catch (err) {
     console.error("[og] render failed:", err);

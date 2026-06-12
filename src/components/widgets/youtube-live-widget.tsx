@@ -58,7 +58,7 @@ export function YouTubeLiveWidget({
       <div className="flex items-center gap-3 p-3">
         {channel?.thumbnail_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <img loading="lazy" decoding="async"
             src={channel.thumbnail_url}
             alt={channel.title}
             className="h-12 w-12 rounded-full object-cover shrink-0"

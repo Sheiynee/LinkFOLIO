@@ -9,22 +9,13 @@ import { getUserFontUsageBytes } from "@/lib/user-fonts";
 import { validateImageFile } from "@/lib/image-magic";
 import { addStorageUsage, cleanupReplacedUploads, ensureStorageHeadroom, subtractStorageUsage } from "@/lib/storage-quota";
 import { rateLimit, RL_UPLOAD } from "@/lib/rate-limit";
+import { revalidatePublicPage } from "@/lib/revalidate";
 
 const MAX_FONT_BYTES = 1024 * 1024; // 1 MB per file (woff2)
 const USER_FONT_QUOTA_BYTES = 5 * 1024 * 1024; // 5 MB total per user
 const WOFF2_MAGIC = [0x77, 0x4f, 0x46, 0x32]; // "wOF2"
 
 const MAX_BG_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
-
-async function getUsernameForUser(userId: string): Promise<string | null> {
-  const supabase = createAdminClient();
-  const { data } = await supabase
-    .from("profiles")
-    .select("username")
-    .eq("id", userId)
-    .single();
-  return data?.username ?? null;
-}
 
 export async function saveTheme(theme: Theme) {
   const session = await auth();
@@ -41,9 +32,8 @@ export async function saveTheme(theme: Theme) {
 
   if (error) return { error: error.message };
 
-  const username = await getUsernameForUser(session.user.id);
   revalidatePath("/dashboard/theme");
-  if (username) revalidatePath(`/${username}`);
+  await revalidatePublicPage(session.user.id);
   return { ok: true };
 }
 
@@ -188,8 +178,7 @@ export async function deleteUserFont(id: string) {
 
   await subtractStorageUsage(session.user.id, Number(row.size_bytes ?? 0));
 
-  const username = await getUsernameForUser(session.user.id);
   revalidatePath("/dashboard/theme");
-  if (username) revalidatePath(`/${username}`);
+  await revalidatePublicPage(session.user.id);
   return { ok: true };
 }

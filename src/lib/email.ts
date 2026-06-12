@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { siteBaseUrl } from "./site-url";
 
 function getResend() {
   return new Resend(process.env.RESEND_API_KEY ?? "re_placeholder");
@@ -26,11 +27,7 @@ export async function sendWeeklyDigest(
   to: string,
   stats: { views: number; clicks: number; username: string }
 ) {
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ??
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-      : "http://localhost:3000");
+  const siteUrl = siteBaseUrl();
 
   await getResend().emails.send({
     from: FROM,

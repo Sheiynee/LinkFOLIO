@@ -1,10 +1,7 @@
 import type { MetadataRoute } from "next";
+import { siteBaseUrl } from "@/lib/site-url";
 
-const siteBase =
-  process.env.NEXT_PUBLIC_SITE_URL ??
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL
-    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-    : "http://localhost:3000");
+const siteBase = siteBaseUrl();
 
 /**
  * Robots policy. Public profile pages are crawlable so they get indexed —
